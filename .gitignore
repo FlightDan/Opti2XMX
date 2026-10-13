@@ -1,0 +1,8 @@
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+*.zip
+runtime.local.json
+.env
+.env.*

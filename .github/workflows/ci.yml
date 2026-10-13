@@ -1,0 +1,32 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: node test_frontend.mjs
+      - run: python3 -m unittest -v test_manager.Tests test_opti.Lifecycle test_per_game.BackupTests
+      - run: python3 package_plugin.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opti2xmx-0.2.1
+          path: opti2xmx-*.zip
