@@ -16,6 +16,16 @@
 
 本项目为独立、非官方项目，与 Intel、Valve、Decky 和 OptiScaler 无隶属关系。
 
+## 截图
+
+主界面（英文界面）：
+
+![Opti2XMX 主界面：XMX 加速和 Opti 注入开关](assets/screenshots/main-en.png)
+
+高级设置（英文界面）：
+
+![Opti2XMX 高级设置：超分、帧生成和显卡身份](assets/screenshots/advanced-en.png)
+
 ## 使用条件
 
 - Linux / SteamOS 原生 Steam、Decky Loader，以及至少运行过一次的 Proton 游戏。

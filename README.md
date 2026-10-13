@@ -16,6 +16,16 @@ Version **0.2.1** · Experimental preview · AGPL-3.0-only license
 
 This is an independent, unofficial project. It is not affiliated with Intel, Valve, Decky or OptiScaler.
 
+## Screenshots
+
+Main controls (English interface):
+
+![Opti2XMX main controls showing XMX acceleration and Opti injection](assets/screenshots/main-en.png)
+
+Advanced settings (English interface):
+
+![Opti2XMX advanced settings showing upscaling, frame generation and GPU identity](assets/screenshots/advanced-en.png)
+
 ## Requirements
 
 - Native Steam on Linux/SteamOS, Decky Loader, and a Proton game launched at least once.
