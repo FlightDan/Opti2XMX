@@ -68,4 +68,4 @@ python3 package_plugin.py
 
 本项目使用 AI 辅助开发。贡献代码需要人工审阅和目标设备测试。报告问题时请提供插件／Decky／SteamOS 版本、显卡、游戏、Proton 版本及复现步骤；分享日志前移除个人路径和账号信息。
 
-基于 [Decky](https://github.com/SteamDeckHomebrew/decky-loader)，使用 [OptiScaler](https://github.com/optiscaler/OptiScaler) 和另行配置的 [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)。参见[第三方说明](THIRD_PARTY_NOTICES.md)和[Decky 商店提交说明](docs/DECKY_STORE.md)。
+基于 [Decky](https://github.com/SteamDeckHomebrew/decky-loader)，使用 [OptiScaler](https://github.com/optiscaler/OptiScaler) 和另行配置的 [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux)。参见[第三方说明](THIRD_PARTY_NOTICES.md)。

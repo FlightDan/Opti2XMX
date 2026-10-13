@@ -68,4 +68,4 @@ The archive is written to `opti2xmx-0.2.1.zip`. It contains the Python backend, 
 
 This project was developed with AI assistance. Contributions should be reviewed and tested on the target system. When reporting a bug, include plugin/Decky/SteamOS versions, GPU, game, Proton version and reproduction steps; remove personal paths and account details from logs.
 
-Built with [Decky](https://github.com/SteamDeckHomebrew/decky-loader), using [OptiScaler](https://github.com/optiscaler/OptiScaler) and the separately provisioned [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux) runtime. See [third-party notices](THIRD_PARTY_NOTICES.md) and [Decky Store submission notes](docs/DECKY_STORE.md).
+Built with [Decky](https://github.com/SteamDeckHomebrew/decky-loader), using [OptiScaler](https://github.com/optiscaler/OptiScaler) and the separately provisioned [xess-xmx-linux](https://github.com/HHHHanasak1/xess-xmx-linux) runtime. See [third-party notices](THIRD_PARTY_NOTICES.md).
