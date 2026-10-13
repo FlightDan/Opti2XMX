@@ -4,7 +4,7 @@
 
 **A Decky plugin for per-game OptiScaler management and Intel XeSS XMX setup on SteamOS.**
 
-Version **0.2.1** · Experimental preview · MIT license
+Version **0.2.1** · Experimental preview · AGPL-3.0-only license
 
 ## Features
 

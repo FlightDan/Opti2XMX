@@ -4,7 +4,7 @@
 
 **在 SteamOS 上按游戏管理 OptiScaler 和 Intel XeSS XMX 的 Decky 插件。**
 
-版本 **0.2.1** · 实验预览版 · MIT 许可证
+版本 **0.2.1** · 实验预览版 · AGPL-3.0-only 许可证
 
 ## 功能
 
