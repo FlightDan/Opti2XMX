@@ -21,6 +21,7 @@ import uuid
 MAX_ARCHIVE = 200 * 1024 * 1024
 MAX_EXPANDED = 1024 * 1024 * 1024
 MAX_MEMBERS = 512
+UNPUBLISHED = '固定版本的 XMX 运行环境尚未发布。发布后请更新插件。'
 REQUIRED = ('runtime/igdext64.dll', 'runtime/lib/libvulkan_intel.so',
             'runtime/tools/cm-compile.sh', 'runtime/tools/cmk_pack.py',
             'sdk/libxess.dll', 'runtime/LICENSE', 'runtime/THIRD_PARTY.md', 'sdk/XeSS-LICENSE.txt')
@@ -145,14 +146,14 @@ class RuntimeMixin:
         return dict(ready=ready, available=descriptor['published'], version=descriptor['version'],
                     size_bytes=descriptor['size_bytes'], host_issue=host_issue(),
                     error=problem, availability_message='' if descriptor['published'] else
-                    'The pinned XMX runtime release is not published yet. Update the plugin when it becomes available.')
+                    UNPUBLISHED)
 
     def runtime_install(self):
         descriptor = source_descriptor()
         identity = self.progress.begin(None, 'runtime_install', descriptor['version'])
         try:
             if not descriptor['published']:
-                raise RuntimeError('The pinned XMX runtime release is not published yet. Update the plugin when it becomes available.')
+                raise RuntimeError(UNPUBLISHED)
             issue = host_issue()
             if issue:
                 raise RuntimeError(issue)

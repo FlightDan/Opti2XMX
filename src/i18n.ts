@@ -6,6 +6,7 @@ export function language(): 'zh' | 'en' {
 }
 
 const english: Record<string, string> = {
+  '固定版本的 XMX 运行环境尚未发布。发布后请更新插件。':'The pinned XMX runtime release is not published yet. Update the plugin when it becomes available.',
   '独立的 XMX 组件，不含 OptiScaler。':'Separate XMX components; OptiScaler is managed separately.',
   'XMX 运行环境已就绪。':'XMX runtime is ready.', 'XMX 运行环境已就绪':'XMX runtime ready',
   '下载后校验并配置到当前用户目录。':'Download, verify and configure in your user data directory.',

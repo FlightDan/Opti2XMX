@@ -79,7 +79,7 @@ class RuntimeTests(unittest.TestCase):
             status = self.manager.runtime_status()
             self.assertFalse(status['ready']); self.assertFalse(status['available'])
             self.assertGreater(status['size_bytes'], 0)
-            with self.assertRaisesRegex(RuntimeError, 'not published'):
+            with self.assertRaisesRegex(RuntimeError, '尚未发布'):
                 self.manager.runtime_install()
         self.assertFalse(self.manager.root.exists())
 

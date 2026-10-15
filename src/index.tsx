@@ -263,7 +263,7 @@ function Content() {
     {progressDisconnected && <PanelSectionRow><div role="status">{t('进度连接暂不可用，正在重试。')}</div></PanelSectionRow>}
     <ButtonItem layout="below" disabled={busy || !runtime || runtime.ready || !runtime.available || !!runtime.host_issue}
       description={runtime ? <>{t('独立的 XMX 组件，不含 OptiScaler。')} {runtime.version} · {(runtime.size_bytes / 1000000).toFixed(1)} MB<br />
-        {runtime.ready ? t('XMX 运行环境已就绪。') : runtime.error || runtime.availability_message || runtime.host_issue || t('下载后校验并配置到当前用户目录。')}</> : t('正在检查 XMX 运行环境…')}
+        {runtime.ready ? t('XMX 运行环境已就绪。') : t(runtime.error || runtime.availability_message || runtime.host_issue || '下载后校验并配置到当前用户目录。')}</> : t('正在检查 XMX 运行环境…')}
       onClick={() => task(t('正在下载并配置 XMX 运行环境…'), async () => {
         try {
           setRuntime(unwrap(await runtimeInstall()));
