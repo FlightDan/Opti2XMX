@@ -207,11 +207,12 @@ class RuntimeRPC(unittest.IsolatedAsyncioTestCase):
 
 
 class DescriptorTests(unittest.TestCase):
-    def test_source_is_bundled_pinned_and_unpublished(self):
+    def test_source_is_bundled_pinned_to_release(self):
         source = setup.source_descriptor()
-        self.assertEqual(source['size_bytes'], 195433378)
-        self.assertEqual(source['sha256'], '177c0ffa64e88993a4707d751d3f2b286194997457962fd8ca64fba7d8ed2c43')
-        self.assertFalse(source['published']); self.assertIsNone(source['url'])
+        self.assertEqual(source['size_bytes'], 195558423)
+        self.assertEqual(source['sha256'], 'aa384e5704286e2d765ed9770e6599ad8e46e2d15821c1f9e51682f3521aa50b')
+        self.assertTrue(source['published'])
+        self.assertEqual(source['url'], 'https://github.com/FlightDan/Opti2XMX/releases/download/v0.2.3/opti2xmx-xmx-runtime-20261005-' + source['sha256'][:16] + '.tar.gz')
 
     def test_published_descriptor_rejects_unsigned_remote_metadata_and_mirrors(self):
         source = setup.source_descriptor(); source['published'] = True
