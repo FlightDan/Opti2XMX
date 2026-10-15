@@ -18,6 +18,7 @@ import struct
 import sys
 import uuid
 from opti import OptiMixin
+from download_progress import OperationProgress
 
 
 def vdf(text):
@@ -77,6 +78,7 @@ class Manager(OptiMixin):
         self.home = Path(home or Path.home()).resolve()
         self.root = self.home / '.local/share/opti2xmx'
         self.engine = engine
+        self.progress = OperationProgress()
 
     def runtime(self):
         if self.engine is None:

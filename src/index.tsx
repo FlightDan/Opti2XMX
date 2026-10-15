@@ -13,6 +13,7 @@ type Info = Game & { executables: string[]; libraries: { path: string; version: 
   automatic: { executable: string; route: string; reason: string; candidates: string[] }; state: Setup | null;
   opti?: { managed: boolean; installed: boolean; injection_enabled: boolean; version: string; status: string; rollback: boolean; pending?: Pending; settings: Settings } };
 type Registration = { unregister(): void };
+type Operation = {schema:number;instance_id:string;operation_id:string|null;appid:number|null;kind:string;version:string;phase:string;running:boolean;downloaded_bytes:number;total_bytes:number|null;error:string|null;revision:number};
 declare const SteamClient: { Apps: {
   RegisterForAppDetails(id: number, callback: (...args: unknown[]) => void): Registration;
   SetAppLaunchOptions(id: number, value: string): void;
@@ -30,6 +31,7 @@ const optiConfirm = callable<[number, string], Reply<boolean>>('opti_confirm');
 const optiToggle = callable<[number, boolean, string], Reply<Pending>>('opti_toggle');
 const optiSettings = callable<[number, Settings, boolean], Reply<boolean>>('opti_settings');
 const optiPanel = callable<[number], Reply<boolean>>('opti_panel');
+const operationProgress = callable<[], Reply<Operation>>('operation_progress');
 function unwrap<T>(r: Reply<T>): T {
   if (!r.ok || r.data === undefined) throw new Error(t(r.error || '操作失败'));
   return r.data;
@@ -64,7 +66,7 @@ function Content() {
   const [info, setInfo] = useState<Info | null>(null);
   const [manualExe, setManualExe] = useState('');
   const [actualLaunch, setActualLaunch] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [localBusy, setBusy] = useState(false);
   const [message, setMessage] = useState(t('正在读取游戏列表…'));
   const [error, setError] = useState(false);
   const lock = useRef(false);
@@ -73,15 +75,51 @@ function Content() {
   const [source, setSource] = useState('github');
   const [settings, setSettings] = useState<Settings>({sr:'xess',fg:'native',fg_input:'upscaler',spoof:'real'});
   const [removeConfirm, setRemoveConfirm] = useState(false);
+  const [operation, setOperation] = useState<Operation | null>(null);
+  const [progressDisconnected, setProgressDisconnected] = useState(false);
+  const latestOperation = useRef<Operation | null>(null);
+  const mounted = useRef(true);
+  const selected = useRef(0);
+  const loadSequence = useRef(0);
+  const progressRequest = useRef(0);
+  const acceptedRequest = useRef(0);
+  const refreshNeeded = useRef<{appid:number;instance:string;operation:string|null} | null>(null);
+  const busy = localBusy || operation?.running === true;
+  function acceptOperation(value: Operation) {
+    if (!mounted.current || value.schema !== 1 || !Number.isSafeInteger(value.revision)
+      || (latestOperation.current?.instance_id === value.instance_id && value.revision < latestOperation.current.revision)) return false;
+    latestOperation.current = value; setOperation(value);
+    return true;
+  }
+  async function readOperation(allowed = () => mounted.current) {
+    const request = ++progressRequest.current;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const reply = await Promise.race([operationProgress(), new Promise<Reply<Operation>>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('progress timeout')), 5000);
+      })]);
+      const value = unwrap(reply);
+      if (request < acceptedRequest.current || !allowed()) return null;
+      acceptedRequest.current = request;
+      setProgressDisconnected(false);
+      return acceptOperation(value) ? value : null;
+    } catch (e) {
+      acceptedRequest.current = Math.max(acceptedRequest.current, request);
+      if (allowed()) setProgressDisconnected(true);
+      throw e;
+    } finally { if (timer !== undefined) clearTimeout(timer); }
+  }
   async function load(id: number) {
+    const sequence = ++loadSequence.current;
     const [data, launch] = await Promise.all([inspect(id).then(unwrap), readLaunch(id)]);
+    if (!mounted.current || selected.current !== id || sequence !== loadSequence.current) return data;
     setInfo(data); setActualLaunch(launch); setManualExe('');
     if (data.opti) setSettings(data.opti.settings);
     setRemoveConfirm(false);
     return data;
   }
-  async function task(progress: string, fn: () => Promise<void>) {
-    if (lock.current) return;
+  async function task(progress: string, fn: () => Promise<void>, reattach = false) {
+    if (lock.current || (!reattach && latestOperation.current?.running)) return;
     lock.current = true; setBusy(true); setError(false); setMessage(progress);
     try { await fn(); }
     catch (e) {
@@ -93,18 +131,51 @@ function Content() {
   async function select(id: number) {
     await task(t('正在检查这个游戏…'), async () => {
       setAppid(id); setInfo(null); setManualExe('');
+      selected.current = id;
       await load(id); setMessage('');
       localStorage.setItem('opti2xmx-selected', String(id));
     });
   }
   useEffect(() => {
+    mounted.current = true;
+    let alive = true, polling = false;
+    async function poll() {
+      if (polling) return;
+      polling = true;
+      try {
+        const before = latestOperation.current;
+        const next = await readOperation(() => alive && mounted.current);
+        if (!alive || !next) return;
+        const restarted = before && before.instance_id !== next.instance_id;
+        const confirmed = before?.operation_id === next.operation_id && before?.phase === 'awaiting-launch' && next.phase === 'completed';
+        if ((restarted || (before?.running && !next.running) || confirmed) && selected.current > 0
+          && (restarted || next.appid === selected.current))
+          refreshNeeded.current = {appid:selected.current,instance:next.instance_id,operation:next.operation_id};
+        const refresh = refreshNeeded.current;
+        if (refresh && (refresh.appid !== selected.current || refresh.instance !== next.instance_id || refresh.operation !== next.operation_id))
+          refreshNeeded.current = null;
+        else if (refresh && !lock.current) {
+          await load(refresh.appid);
+          if (refreshNeeded.current === refresh) refreshNeeded.current = null;
+        }
+      } catch { /* Keep the last running snapshot; a failed poll must not unlock it. */ }
+      finally { polling = false; }
+    }
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 500);
+    return () => { alive = false; mounted.current = false; clearInterval(timer); };
+  }, []);
+  useEffect(() => {
     void task(t('正在读取游戏列表…'), async () => {
-      const list = unwrap(await inventory()); setGames(list);
+      try { await readOperation(); } catch { /* Inventory remains usable while snapshot polling reconnects. */ }
+      const list = unwrap(await inventory()); if (!mounted.current) return; setGames(list);
       const previous = Number(localStorage.getItem('opti2xmx-selected'));
-      const id = list.find(g => g.appid === previous)?.appid || list[0]?.appid;
-      if (id) { setAppid(id); await load(id); setMessage(''); }
+      const attached = latestOperation.current;
+      const attach = attached?.running || attached?.phase === 'awaiting-launch';
+      const id = (attach ? list.find(g => g.appid === attached?.appid)?.appid : undefined) || list.find(g => g.appid === previous)?.appid || list[0]?.appid;
+      if (id) { selected.current = id; setAppid(id); await load(id); setMessage(''); }
       else setMessage(t('未找到已安装的 Steam 游戏。'));
-    });
+    }, true);
   }, []);
   async function finish(id: number, setup: Setup, restoring = false) {
     const before = await readLaunch(id);
@@ -163,8 +234,10 @@ function Content() {
           : kind === 'migrate' ? unwrap(await optiMigrate(id, executable, before))
           : kind === 'rollback' ? unwrap(await optiRollback(id, before))
           : kind === 'uninstall' ? unwrap(await optiUninstall(id, before)) : opti!.pending!;
+        if (!mounted.current) return;
         if (before !== next.expected && before !== next.target) throw new Error(t('启动项已变化，请检查后重试'));
         const actual = before === next.target ? before : await writeLaunch(id, next.target, before);
+        if (!mounted.current) return;
         unwrap(await optiConfirm(id, actual));
         setMessage(t('Opti 操作完成，下次启动游戏生效。'));
         toaster.toast({title:'Opti2XMX',body:t('Opti 配置已完成')});
@@ -180,6 +253,7 @@ function Content() {
   }
   const options = (items: [string,string][]) => items.map(([data,label])=>({data,label}));
   return <PanelSection>
+    {progressDisconnected && <PanelSectionRow><div role="status">{t('进度连接暂不可用，正在重试。')}</div></PanelSectionRow>}
     <DropdownItem label={t('游戏')} layout="below" disabled={busy} selectedOption={appid} strDefaultLabel={t('选择游戏')}
       rgOptions={games.map(g => ({ data: g.appid, label: g.name }))} onChange={v => void select(Number(v.data))} />
     {info ? <>
@@ -239,8 +313,17 @@ function Content() {
           <ButtonItem layout="below" disabled={busy || managed || optiPending || !opti.managed} description={t('卸载本插件管理的 Opti 文件并恢复原文件；需先关闭 XMX。')} onClick={()=>removeConfirm ? optiAction('uninstall') : setRemoveConfirm(true)}>{removeConfirm?t('确认卸载 Opti'):t('卸载 Opti')}</ButtonItem>
         </>}
       </>}
-      {!busy && !error && message && <PanelSectionRow><div role="status" style={{fontSize:13,lineHeight:1.5}}>{t(message)}</div></PanelSectionRow>}
+      {message && <PanelSectionRow><div role={error ? 'alert' : 'status'} style={{fontSize:13,lineHeight:1.5}}>{t(message)}</div></PanelSectionRow>}
     </> : <PanelSectionRow><div role="status" style={{fontSize:13,lineHeight:1.5}}>{t(message)}</div></PanelSectionRow>}
+    {operation?.operation_id && (operation.appid === appid || operation.running) && <PanelSectionRow>
+      <div role={operation.phase === 'failed' ? 'alert' : 'status'} style={{fontSize:13,lineHeight:1.5}}>
+        {t(({started:'正在准备 Opti…',downloading:'正在下载 Opti…','cache-hit':'正在复用 Opti 缓存…',extracting:'正在解压 Opti…',installing:'正在安装 Opti…','awaiting-launch':'Opti 已准备，等待确认启动设置。',completed:'Opti 操作已完成。',failed:'Opti 操作未完成。'} as Record<string,string>)[operation.phase] || '正在处理 Opti 配置…')}
+        {operation.downloaded_bytes > 0 && <> · {(operation.downloaded_bytes / 1048576).toFixed(1)} MiB
+          {operation.total_bytes !== null && operation.total_bytes > 0 && operation.downloaded_bytes <= operation.total_bytes
+            && <> / {(operation.total_bytes / 1048576).toFixed(1)} MiB · {(operation.downloaded_bytes * 100 / operation.total_bytes).toFixed(0)}%</>}</>}
+        {operation.error && <> · {t(operation.error)}</>}
+      </div>
+    </PanelSectionRow>}
     <ButtonItem layout="below" disabled={busy} onClick={() => task(t('正在刷新…'), async () => {
       setGames(unwrap(await inventory())); if (appid) await load(appid); setMessage('');
     })}>{t('刷新')}</ButtonItem>

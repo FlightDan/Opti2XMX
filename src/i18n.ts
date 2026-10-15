@@ -6,6 +6,11 @@ export function language(): 'zh' | 'en' {
 }
 
 const english: Record<string, string> = {
+  '进度连接暂不可用，正在重试。':'Progress connection is temporarily unavailable. Retrying.',
+  '正在准备 Opti…':'Preparing Opti…','正在下载 Opti…':'Downloading Opti…','正在复用 Opti 缓存…':'Reusing the Opti cache…',
+  '正在解压 Opti…':'Extracting Opti…','正在安装 Opti…':'Installing Opti…','Opti 已准备，等待确认启动设置。':'Opti is prepared; confirm the launch setup.',
+  'Opti 操作已完成。':'Opti operation completed.','Opti 操作未完成。':'Opti operation did not complete.',
+  'Opti 操作仍在进行，请等待完成。':'An Opti operation is still running. Wait for it to finish.',
   '仅支持 Intel 设备。': 'Intel devices only.',
   '为游戏启用 XMX 加速，使兼容的游戏中的 XeSS 帧生成可以正常使用。': 'Enable XMX acceleration so XeSS Frame Generation can work in compatible games.',
   '更改状态前请先关闭游戏！': 'Close the game before changing this setting!',

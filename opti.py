@@ -76,7 +76,18 @@ class OptiMixin:
                                   spoof='real' if spoof.lower() == 'false' else
                                   {'0x8086':'intel','0x1002':'amd'}.get(vendor, 'nvidia')))
 
-    def opti_package(self, version, source):
+    def opti_package(self, version, source, operation_id=None):
+        owned = operation_id is None
+        identity = operation_id or self.progress.begin(None, 'opti_download', version)
+        try:
+            payload = self._opti_package(version, source, identity)
+            if owned: self.progress.finish(identity)
+            return payload
+        except Exception as error:
+            self.progress.finish(identity, error=error)
+            raise
+
+    def _opti_package(self, version, source, operation_id):
         if version not in RELEASES or source not in ('github', 'github-api', 'ghfast', 'ghproxy'):
             raise ValueError('请选择支持的版本和下载源')
         tag, filename, asset = RELEASES[version]
@@ -93,18 +104,24 @@ class OptiMixin:
             part = archive.with_suffix('.part')
             try:
                 with urllib.request.urlopen(req, timeout=45) as response, part.open('wb') as out:
+                    header = response.headers.get('Content-Length', '')
+                    total_bytes = int(header) if str(header).isdigit() and len(str(header)) < 12 else None
                     total = 0
+                    self.progress.update(operation_id, 'downloading', 0, total_bytes)
                     while True:
                         chunk = response.read(1024 * 1024)
                         if not chunk: break
                         total += len(chunk)
                         if total > 200 * 1024 * 1024: raise RuntimeError('下载文件超过限制')
                         out.write(chunk)
+                        self.progress.update(operation_id, 'downloading', total, total_bytes)
                 with part.open('rb') as f:
                     if f.read(6) != b'7z\xbc\xaf\x27\x1c': raise RuntimeError('下载源没有返回 7z 安装包，请切换下载源')
                 part.replace(archive)
             finally:
                 if part.exists(): part.unlink()
+        else:
+            self.progress.update(operation_id, 'cache-hit', archive.stat().st_size, archive.stat().st_size)
         # Extract only fixed names via stdout: archive paths/symlinks cannot escape.
         payload = cache / 'payload'
         payload.mkdir(exist_ok=True)
@@ -112,6 +129,7 @@ class OptiMixin:
                                                    for n in ('OptiScaler.dll','OptiScaler.ini','libxess.dll')):
             return payload
         for name in ASSETS:
+            self.progress.update(operation_id, 'extracting')
             p = payload / name
             self.runtime().no_symlink_parents(p)
             if p.is_symlink():raise RuntimeError('缓存文件不能是符号链接')
@@ -198,12 +216,23 @@ class OptiMixin:
         return r['pending']
 
     def opti_install(self, appid, executable, actual, version, source):
+        identity = self.progress.begin(appid, 'opti_install', version)
+        try:
+            pending = self._opti_install(appid, executable, actual, version, source, identity)
+            self.progress.finish(identity, phase='awaiting-launch')
+            return pending
+        except Exception as error:
+            self.progress.finish(identity, error=error)
+            raise
+
+    def _opti_install(self, appid, executable, actual, version, source, operation_id):
         info, folder, prefix, r = self.opti_context(appid,executable,actual)
         if r and not r.get('injection_enabled', True):
             raise RuntimeError('请先开启 Opti 注入，再更换版本')
         if info['optis'] and not (r and r['status']=='active'):
             raise RuntimeError('已存在 Opti，请先迁移现有安装')
-        payload=self.opti_package(version,source)
+        payload=self.opti_package(version,source,operation_id=operation_id)
+        self.progress.update(operation_id, 'installing')
         from manager import ini_set
         with self.runtime().prefix_lock(prefix):
             self.runtime().game_idle(prefix,Path(executable).name)
@@ -368,6 +397,9 @@ class OptiMixin:
             r['status']='removed' if pending['kind']=='uninstall' else 'active';r['pending']=None
         self.opti_save(appid,r)
         if r['status']=='active':self.opti_refresh_applied(appid)
+        progress = self.progress.snapshot()
+        if progress['appid'] == appid and progress['phase'] == 'awaiting-launch':
+            self.progress.finish(progress['operation_id'])
         return True
 
     def opti_rollback(self,appid,actual):

@@ -4,7 +4,7 @@
 
 **在 SteamOS 上按游戏管理 OptiScaler 和 Intel XeSS XMX 的 Decky 插件。**
 
-版本 **0.2.1** · 实验预览版 · AGPL-3.0-only 许可证
+版本 **0.2.2** · AGPL-3.0-only 许可证
 
 ## 功能
 
@@ -13,6 +13,9 @@
 - 独立开关 Opti 注入，保留 XMX 设置和备份。
 - 设置超分、帧生成输出和显卡身份，打开 Opti 面板。
 - 中英文界面，跟随 Steam 语言。
+- 下载进度显示实际字节数、已知总量，以及解压／安装阶段；总量未知时不显示百分比。忙碌和错误提示持续可见。
+
+关闭面板不会取消后台安装，重开后会重新连接当前任务；待确认启动设置仍可继续或恢复。只读进度查询五秒超时后保留最后快照并提示重试，安装命令不会自动重试。
 
 本项目为独立、非官方项目，与 Intel、Valve、Decky 和 OptiScaler 无隶属关系。
 
@@ -36,7 +39,7 @@ XMX 路线在 Intel ONEXPLAYER 3 上开发。AMD Steam Deck 不具备 Intel XMX 
 
 ## 安装
 
-按下方步骤构建 ZIP，或在仓库 [Releases 页面](https://github.com/FlightDan/Opti2XMX/releases)提供安装包后下载 `opti2xmx-0.2.1.zip`。
+从仓库 [Releases 页面](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.2)下载 `opti2xmx-0.2.2.zip`，或按下方步骤构建 ZIP。
 进入 Decky 设置，启用开发者模式，使用 **Install Plugin from ZIP File / 从 ZIP 文件安装插件**（名称可能随 Loader 版本变化），选择安装包后打开 Opti2XMX。
 
 插件以 Steam 用户身份运行，加载插件本身不会修改游戏。安装包不包含上游 DLL、私有运行库二进制、游戏文件或生成的编译缓存。
@@ -68,11 +71,11 @@ pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm build
 node test_frontend.mjs
-python3 -m unittest -v test_manager.Tests test_opti.Lifecycle test_per_game.BackupTests
+python3 -B -m unittest discover -v
 python3 package_plugin.py
 ```
 
-输出为 `opti2xmx-0.2.1.zip`，包含 Python 后端、构建后的前端、文档和许可证。测试夹具覆盖恢复、中断和文件冲突，不能替代真实游戏和硬件测试。
+输出为 `opti2xmx-0.2.2.zip`，包含 Python 后端、构建后的前端、文档和许可证。测试夹具覆盖恢复、中断和文件冲突，不能替代真实游戏和硬件测试。
 
 ## 开发与致谢
 
