@@ -161,7 +161,14 @@ class RuntimeMixin:
             rt.no_symlink_parents(self.root / 'runtime.json')
             if (self.root / 'runtime.json').is_symlink():
                 raise RuntimeError('Runtime configuration cannot be a symlink')
-            self.root.mkdir(parents=True, exist_ok=True)
+            self._runtime_private_directories(self.home)
+            # Create each missing data parent privately even with a permissive
+            # user umask, checking existing parents before descending into them.
+            directory = self.home
+            for part in self.root.relative_to(self.home).parts:
+                directory /= part
+                directory.mkdir(mode=0o700, exist_ok=True)
+                self._runtime_private_directories(directory)
             self._runtime_private_directories(self.root)
             with runtime_lock(self.root / '.runtime-install.lock'):
                 return self._runtime_install(descriptor, identity, self._runtime_config_bytes())
