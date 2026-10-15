@@ -6,6 +6,16 @@ export function language(): 'zh' | 'en' {
 }
 
 const english: Record<string, string> = {
+  '独立的 XMX 组件，不含 OptiScaler。':'Separate XMX components; OptiScaler is managed separately.',
+  'XMX 运行环境已就绪。':'XMX runtime is ready.', 'XMX 运行环境已就绪':'XMX runtime ready',
+  '下载后校验并配置到当前用户目录。':'Download, verify and configure in your user data directory.',
+  '正在检查 XMX 运行环境…':'Checking the XMX runtime…',
+  '正在下载并配置 XMX 运行环境…':'Downloading and configuring the XMX runtime…',
+  '下载并配置 XMX 运行环境':'Download and configure XMX runtime',
+  'XMX 运行环境已配置。选择游戏后开启 XMX。':'XMX runtime configured. Select a game to enable XMX.',
+  '正在准备 XMX 运行环境…':'Preparing the XMX runtime…', '正在下载 XMX 运行环境…':'Downloading the XMX runtime…',
+  '正在解压 XMX 运行环境…':'Extracting the XMX runtime…', '正在验证并配置 XMX 运行环境…':'Validating and configuring the XMX runtime…',
+  'XMX 运行环境配置完成。':'XMX runtime setup completed.', 'XMX 运行环境配置未完成。':'XMX runtime setup did not complete.',
   '进度连接暂不可用，正在重试。':'Progress connection is temporarily unavailable. Retrying.',
   '正在准备 Opti…':'Preparing Opti…','正在下载 Opti…':'Downloading Opti…','正在复用 Opti 缓存…':'Reusing the Opti cache…',
   '正在解压 Opti…':'Extracting Opti…','正在安装 Opti…':'Installing Opti…','Opti 已准备，等待确认启动设置。':'Opti is prepared; confirm the launch setup.',

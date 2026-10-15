@@ -19,6 +19,7 @@ import sys
 import uuid
 from opti import OptiMixin
 from download_progress import OperationProgress
+from runtime_setup import RuntimeMixin
 
 
 def vdf(text):
@@ -73,7 +74,7 @@ def ini_set(text, section, key, value):
     return '\n'.join(lines) + '\n'
 
 
-class Manager(OptiMixin):
+class Manager(OptiMixin, RuntimeMixin):
     def __init__(self, home=None, engine=None):
         self.home = Path(home or Path.home()).resolve()
         self.root = self.home / '.local/share/opti2xmx'
@@ -150,8 +151,13 @@ class Manager(OptiMixin):
         # discovery is read-only and never makes it into a public binary bundle.
         config = self.root / 'runtime.json'
         if config.exists():
-            data = json.loads(config.read_text())
-            package, sr = Path(data['package']), Path(data['sr'])
+            try:
+                data = json.loads(config.read_text())
+                package, sr = Path(data['package']), Path(data['sr'])
+                if not package.is_absolute() or not sr.is_absolute():
+                    raise ValueError('Runtime paths must be absolute')
+            except (OSError, ValueError, KeyError, TypeError):
+                return self.root / 'runtime', self.root / 'sdk/libxess.dll', False
         else:
             package = self.home / '.local/share/opti2xmx/runtime'
             sr = self.home / '.local/share/opti2xmx/sdk/libxess.dll'
@@ -159,7 +165,10 @@ class Manager(OptiMixin):
                 package = self.home / 'oxp3-research/xess/xess-xmx-linux-20261005'
             if not sr.is_file():
                 sr = self.home / 'oxp3-research/xess-sr/payload/libxess.dll'
-        ready = (package / 'igdext64.dll').is_file() and sr.is_file() and (pe_version(sr) or ()) >= (2, 0, 2, 68)
+        ready = all((package / name).is_file() for name in ('igdext64.dll', 'lib/libvulkan_intel.so',
+                    'tools/cm-compile.sh', 'tools/cmk_pack.py')) and sr.is_file() and (pe_version(sr) or ()) >= (2, 0, 2, 68)
+        ready = ready and all(any(p.is_file() for p in package.glob(pattern)) for pattern in
+                    ('igc/neo/bin/ocloc*', 'igc/igc/local/lib/libigc.so*', 'igc/igc/local/lib/libigdfcl.so*'))
         return package, sr, ready
 
     def inspect_game(self, appid):

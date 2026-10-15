@@ -40,6 +40,17 @@ class Lifecycle(Tests):
         back=self.m.opti_rollback(42,r['target']);self.m.opti_confirm(42,back['target'])
         self.assertTrue((self.game/'dxgi.dll').exists())
 
+    def test_opti_install_works_without_xmx_runtime(self):
+        self.fresh()
+        with patch.object(self.m, 'dependencies', return_value=(self.package, self.sr, False)):
+            info = self.m.inspect_game(42)
+            self.assertFalse(info['runtime_ready'])
+            self.assertEqual(info['automatic']['reason'], 'XMX 运行组件未就绪。')
+            with self.assertRaisesRegex(RuntimeError, '运行组件'):
+                self.m.enable(42, 'game.exe', 'native', '')
+            self.install_opti()
+            self.assertTrue(self.m.inspect_game(42)['opti']['managed'])
+
     def test_upgrade_rollback_keeps_old_version(self):
         launch=self.migrate();old=(self.game/'dxgi.dll').read_bytes()
         self.install_opti(launch)

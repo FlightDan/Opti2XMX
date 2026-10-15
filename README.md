@@ -4,11 +4,12 @@
 
 **A Decky plugin for per-game OptiScaler management and Intel XeSS XMX setup on SteamOS.**
 
-Version **0.2.2** · AGPL-3.0-only license
+Development version **0.2.3-dev** · AGPL-3.0-only license
 
 ## Features
 
 - Install OptiScaler 0.9.4 or 0.7.9, migrate recognized existing installations, and roll back changes.
+- A separate **Download and configure XMX runtime** action shows the download size, stages, progress and result. The plugin ZIP stays small; OptiScaler works without this runtime.
 - Enable or restore a per-game XMX setup for compatible Intel hardware.
 - Toggle Opti injection separately, retaining XMX settings and backups.
 - Configure upscaling, frame-generation output and GPU identity; open the Opti overlay.
@@ -32,14 +33,14 @@ Advanced settings (English interface):
 ## Requirements
 
 - Native Steam on Linux/SteamOS, Decky Loader, and a Proton game launched at least once.
-- For XMX: compatible Intel hardware **and a separately prepared XMX runtime, patched ANV and compiler stack**. Installing this plugin alone does not enable XMX. See [runtime setup](docs/RUNTIME.md).
+- For XMX: compatible Intel hardware and a separate XMX runtime, patched ANV and compiler stack. Use the explicit runtime button when a pinned release is available, or an already prepared runtime. The runtime release is **not published yet** in this development build; the UI reports that state. See [runtime setup](docs/RUNTIME.md).
 - System `7z` for OptiScaler extraction; `xdotool` for the overlay shortcut. XMX checks also use `bash`, `ldd` and `vulkaninfo`.
 
 The XMX route has been developed on an Intel ONEXPLAYER 3. AMD Steam Deck hardware cannot provide Intel XMX acceleration. Broad hardware/game compatibility and Decky Store acceptance are not established.
 
 ## Install
 
-Download `opti2xmx-0.2.2.zip` from the [Releases page](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.2), or build the ZIP using the commands below.
+Build this development ZIP using the commands below. The previously published 0.2.2 version is on the [Releases page](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.2); it does not include the runtime button.
 In Decky settings, enable developer mode and use **Install Plugin from ZIP File** (wording may vary by Loader version). Choose the built ZIP, then open Opti2XMX.
 
 The plugin runs as the Steam user and does not modify games just by loading. No upstream DLLs, private runtime binaries, game files or generated compiler caches are bundled.
@@ -48,7 +49,7 @@ The plugin runs as the Steam user and does not modify games just by loading. No 
 
 1. Exit the game and select it in Opti2XMX.
 2. For a game without native XeSS, install OptiScaler or migrate a recognized existing Opti installation. Native XeSS games can use the XMX route directly.
-3. With the runtime prepared, enable **XMX acceleration**. The plugin writes and reads back Steam launch options.
+3. For XMX, use **Download and configure XMX runtime** when available (195.4 MB download), or prepare it separately. Then enable **XMX acceleration**. The plugin writes and reads back Steam launch options.
 4. Use **Opti injection** to enable or disable the managed injector. For native XeSS Frame Generation, turn Opti injection off before testing.
 5. Restart the game after changing settings. Advanced settings include SR/FG output, GPU identity, version selection, rollback and uninstall.
 
@@ -75,7 +76,7 @@ python3 -B -m unittest discover -v
 python3 package_plugin.py
 ```
 
-The archive is written to `opti2xmx-0.2.2.zip`. It contains the Python backend, built frontend, documentation and licenses. Fixture tests cover restoration, interrupted operations and conflicting files; they do not replace real game and hardware testing.
+The archive is written to `opti2xmx-0.2.3-dev.zip`. It contains the Python backend, built frontend, pinned runtime descriptor, documentation and licenses, without runtime DLLs or drivers. Repository screenshots are omitted from the install ZIP to keep it small. Fixture tests cover restoration, interrupted operations, runtime hash/extraction failures and conflicting files; they do not replace real game and hardware testing. The screenshots above show the prior 0.2.2 interface.
 
 ## Development and credits
 

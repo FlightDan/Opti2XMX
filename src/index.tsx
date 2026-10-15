@@ -13,6 +13,7 @@ type Info = Game & { executables: string[]; libraries: { path: string; version: 
   automatic: { executable: string; route: string; reason: string; candidates: string[] }; state: Setup | null;
   opti?: { managed: boolean; installed: boolean; injection_enabled: boolean; version: string; status: string; rollback: boolean; pending?: Pending; settings: Settings } };
 type Registration = { unregister(): void };
+type RuntimeStatus = {ready:boolean;available:boolean;version:string;size_bytes:number;host_issue:string;error:string;availability_message:string};
 type Operation = {schema:number;instance_id:string;operation_id:string|null;appid:number|null;kind:string;version:string;phase:string;running:boolean;downloaded_bytes:number;total_bytes:number|null;error:string|null;revision:number};
 declare const SteamClient: { Apps: {
   RegisterForAppDetails(id: number, callback: (...args: unknown[]) => void): Registration;
@@ -32,6 +33,8 @@ const optiToggle = callable<[number, boolean, string], Reply<Pending>>('opti_tog
 const optiSettings = callable<[number, Settings, boolean], Reply<boolean>>('opti_settings');
 const optiPanel = callable<[number], Reply<boolean>>('opti_panel');
 const operationProgress = callable<[], Reply<Operation>>('operation_progress');
+const runtimeStatus = callable<[], Reply<RuntimeStatus>>('runtime_status');
+const runtimeInstall = callable<[], Reply<RuntimeStatus>>('runtime_install');
 function unwrap<T>(r: Reply<T>): T {
   if (!r.ok || r.data === undefined) throw new Error(t(r.error || '操作失败'));
   return r.data;
@@ -84,6 +87,7 @@ function Content() {
   const progressRequest = useRef(0);
   const acceptedRequest = useRef(0);
   const refreshNeeded = useRef<{appid:number;instance:string;operation:string|null} | null>(null);
+  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const busy = localBusy || operation?.running === true;
   function acceptOperation(value: Operation) {
     if (!mounted.current || value.schema !== 1 || !Number.isSafeInteger(value.revision)
@@ -148,8 +152,10 @@ function Content() {
         if (!alive || !next) return;
         const restarted = before && before.instance_id !== next.instance_id;
         const confirmed = before?.operation_id === next.operation_id && before?.phase === 'awaiting-launch' && next.phase === 'completed';
+        if (before?.running && !next.running && next.kind === 'runtime_install')
+          setRuntime(unwrap(await runtimeStatus()));
         if ((restarted || (before?.running && !next.running) || confirmed) && selected.current > 0
-          && (restarted || next.appid === selected.current))
+          && (restarted || next.appid === selected.current || next.kind === 'runtime_install'))
           refreshNeeded.current = {appid:selected.current,instance:next.instance_id,operation:next.operation_id};
         const refresh = refreshNeeded.current;
         if (refresh && (refresh.appid !== selected.current || refresh.instance !== next.instance_id || refresh.operation !== next.operation_id))
@@ -168,6 +174,7 @@ function Content() {
   useEffect(() => {
     void task(t('正在读取游戏列表…'), async () => {
       try { await readOperation(); } catch { /* Inventory remains usable while snapshot polling reconnects. */ }
+      setRuntime(unwrap(await runtimeStatus()));
       const list = unwrap(await inventory()); if (!mounted.current) return; setGames(list);
       const previous = Number(localStorage.getItem('opti2xmx-selected'));
       const attached = latestOperation.current;
@@ -254,6 +261,18 @@ function Content() {
   const options = (items: [string,string][]) => items.map(([data,label])=>({data,label}));
   return <PanelSection>
     {progressDisconnected && <PanelSectionRow><div role="status">{t('进度连接暂不可用，正在重试。')}</div></PanelSectionRow>}
+    <ButtonItem layout="below" disabled={busy || !runtime || runtime.ready || !runtime.available || !!runtime.host_issue}
+      description={runtime ? <>{t('独立的 XMX 组件，不含 OptiScaler。')} {runtime.version} · {(runtime.size_bytes / 1000000).toFixed(1)} MB<br />
+        {runtime.ready ? t('XMX 运行环境已就绪。') : runtime.error || runtime.availability_message || runtime.host_issue || t('下载后校验并配置到当前用户目录。')}</> : t('正在检查 XMX 运行环境…')}
+      onClick={() => task(t('正在下载并配置 XMX 运行环境…'), async () => {
+        try {
+          setRuntime(unwrap(await runtimeInstall()));
+          setMessage(t('XMX 运行环境已配置。选择游戏后开启 XMX。'));
+        } finally {
+          setRuntime(unwrap(await runtimeStatus()));
+          if (appid) await load(appid);
+        }
+      })}>{runtime?.ready ? t('XMX 运行环境已就绪') : t('下载并配置 XMX 运行环境')}</ButtonItem>
     <DropdownItem label={t('游戏')} layout="below" disabled={busy} selectedOption={appid} strDefaultLabel={t('选择游戏')}
       rgOptions={games.map(g => ({ data: g.appid, label: g.name }))} onChange={v => void select(Number(v.data))} />
     {info ? <>
@@ -315,9 +334,9 @@ function Content() {
       </>}
       {message && <PanelSectionRow><div role={error ? 'alert' : 'status'} style={{fontSize:13,lineHeight:1.5}}>{t(message)}</div></PanelSectionRow>}
     </> : <PanelSectionRow><div role="status" style={{fontSize:13,lineHeight:1.5}}>{t(message)}</div></PanelSectionRow>}
-    {operation?.operation_id && (operation.appid === appid || operation.running) && <PanelSectionRow>
+    {operation?.operation_id && (operation.appid === appid || operation.running || operation.kind === 'runtime_install') && <PanelSectionRow>
       <div role={operation.phase === 'failed' ? 'alert' : 'status'} style={{fontSize:13,lineHeight:1.5}}>
-        {t(({started:'正在准备 Opti…',downloading:'正在下载 Opti…','cache-hit':'正在复用 Opti 缓存…',extracting:'正在解压 Opti…',installing:'正在安装 Opti…','awaiting-launch':'Opti 已准备，等待确认启动设置。',completed:'Opti 操作已完成。',failed:'Opti 操作未完成。'} as Record<string,string>)[operation.phase] || '正在处理 Opti 配置…')}
+        {t(((operation.kind === 'runtime_install' ? {started:'正在准备 XMX 运行环境…',downloading:'正在下载 XMX 运行环境…',extracting:'正在解压 XMX 运行环境…',installing:'正在验证并配置 XMX 运行环境…',completed:'XMX 运行环境配置完成。',failed:'XMX 运行环境配置未完成。'} : {started:'正在准备 Opti…',downloading:'正在下载 Opti…','cache-hit':'正在复用 Opti 缓存…',extracting:'正在解压 Opti…',installing:'正在安装 Opti…','awaiting-launch':'Opti 已准备，等待确认启动设置。',completed:'Opti 操作已完成。',failed:'Opti 操作未完成。'}) as Record<string,string>)[operation.phase] || '正在处理 Opti 配置…')}
         {operation.downloaded_bytes > 0 && <> · {(operation.downloaded_bytes / 1048576).toFixed(1)} MiB
           {operation.total_bytes !== null && operation.total_bytes > 0 && operation.downloaded_bytes <= operation.total_bytes
             && <> / {(operation.total_bytes / 1048576).toFixed(1)} MiB · {(operation.downloaded_bytes * 100 / operation.total_bytes).toFixed(0)}%</>}</>}
@@ -325,7 +344,7 @@ function Content() {
       </div>
     </PanelSectionRow>}
     <ButtonItem layout="below" disabled={busy} onClick={() => task(t('正在刷新…'), async () => {
-      setGames(unwrap(await inventory())); if (appid) await load(appid); setMessage('');
+      setRuntime(unwrap(await runtimeStatus())); setGames(unwrap(await inventory())); if (appid) await load(appid); setMessage('');
     })}>{t('刷新')}</ButtonItem>
   </PanelSection>;
 }

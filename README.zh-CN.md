@@ -4,11 +4,12 @@
 
 **在 SteamOS 上按游戏管理 OptiScaler 和 Intel XeSS XMX 的 Decky 插件。**
 
-版本 **0.2.2** · AGPL-3.0-only 许可证
+开发版本 **0.2.3-dev** · AGPL-3.0-only 许可证
 
 ## 功能
 
 - 安装 OptiScaler 0.9.4 / 0.7.9，迁移可识别的已有安装，支持回退。
+- 独立的“下载并配置 XMX 运行环境”按钮，显示体积、下载进度、阶段和结果。插件 ZIP 保持小体积；没有 XMX 运行环境也能管理 OptiScaler。
 - 为兼容的 Intel 设备按游戏开启或恢复 XMX 配置。
 - 独立开关 Opti 注入，保留 XMX 设置和备份。
 - 设置超分、帧生成输出和显卡身份，打开 Opti 面板。
@@ -32,14 +33,14 @@
 ## 使用条件
 
 - Linux / SteamOS 原生 Steam、Decky Loader，以及至少运行过一次的 Proton 游戏。
-- XMX 需要兼容的 Intel 硬件，**另行准备 XMX 运行库、修改版 ANV 和编译器环境**。仅安装本插件不能直接启用 XMX，参见[运行环境说明](docs/RUNTIME.md)。
+- XMX 需要兼容的 Intel 硬件，以及独立的 XMX 运行库、修改版 ANV 和编译器环境。固定版本的运行环境发布后可点击按钮下载，也能使用已准备的运行环境。本开发版的运行环境**尚未发布**，界面会明确提示。参见[运行环境说明](docs/RUNTIME.md)。
 - Opti 解压需要系统 `7z`；打开面板需要 `xdotool`。XMX 检查还会使用 `bash`、`ldd` 和 `vulkaninfo`。
 
 XMX 路线在 Intel ONEXPLAYER 3 上开发。AMD Steam Deck 不具备 Intel XMX 加速能力。目前未完成广泛设备、游戏兼容性验证，也未获得 Decky 商店收录。
 
 ## 安装
 
-从仓库 [Releases 页面](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.2)下载 `opti2xmx-0.2.2.zip`，或按下方步骤构建 ZIP。
+本开发版需按下方步骤构建 ZIP。之前发布的 0.2.2 可从 [Releases 页面](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.2)下载，该旧版尚无运行环境下载按钮。
 进入 Decky 设置，启用开发者模式，使用 **Install Plugin from ZIP File / 从 ZIP 文件安装插件**（名称可能随 Loader 版本变化），选择安装包后打开 Opti2XMX。
 
 插件以 Steam 用户身份运行，加载插件本身不会修改游戏。安装包不包含上游 DLL、私有运行库二进制、游戏文件或生成的编译缓存。
@@ -48,7 +49,7 @@ XMX 路线在 Intel ONEXPLAYER 3 上开发。AMD Steam Deck 不具备 Intel XMX 
 
 1. 退出游戏，在 Opti2XMX 中选择游戏。
 2. 游戏没有原生 XeSS 时，安装 OptiScaler 或迁移可识别的 Opti 安装；原生 XeSS 游戏可直接走 XMX 路线。
-3. 运行环境就绪后开启 **XMX 加速**，插件会写入并读回确认 Steam 启动项。
+3. 如需 XMX，运行环境发布后点击 **下载并配置 XMX 运行环境**（下载 195.4 MB），或另行准备。就绪后开启 **XMX 加速**，插件会写入并读回确认 Steam 启动项。
 4. 使用 **Opti 注入**开关控制已管理的注入器。测试游戏原生 XeSS 帧生成时，先关闭 Opti 注入。
 5. 更改后重新启动游戏。高级设置提供超分／帧生成输出、显卡身份、版本选择、回退和卸载。
 
@@ -75,7 +76,7 @@ python3 -B -m unittest discover -v
 python3 package_plugin.py
 ```
 
-输出为 `opti2xmx-0.2.2.zip`，包含 Python 后端、构建后的前端、文档和许可证。测试夹具覆盖恢复、中断和文件冲突，不能替代真实游戏和硬件测试。
+输出为 `opti2xmx-0.2.3-dev.zip`，包含 Python 后端、构建后的前端、固定运行环境描述、文档和许可证，不含运行库 DLL 和驱动；仓库中的截图不放入安装 ZIP，保持小体积。测试夹具覆盖恢复、中断、运行环境校验／解压失败和文件冲突，不能替代真实游戏和硬件测试。上方截图为之前的 0.2.2 界面。
 
 ## 开发与致谢
 

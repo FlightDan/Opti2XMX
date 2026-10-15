@@ -8,11 +8,13 @@ const progressTimeouts = new Map();
 let savedSelection=null, timeoutId=0, inspectCount=0;
 let timerId=0;
 let operation={schema:1,instance_id:'backend-1',operation_id:null,appid:null,kind:'',version:'',phase:'completed',running:false,downloaded_bytes:0,total_bytes:null,error:null,revision:0};
+let runtime={ready:false,available:true,version:'fixture',size_bytes:195433378,host_issue:'',error:'',availability_message:''};
 const info = {appid:42,name:'Demo',executables:['game.exe','Launcher.exe'],libraries:[{path:'libxess.dll'}],optis:[],
   runtime_ready:true,prefix_ready:true,external_managed:false,state:null,
   automatic:{executable:'game.exe',route:'native',reason:'',candidates:['game.exe']}};
 const copy = value => JSON.parse(JSON.stringify(value));
 const methods = {
+  runtime_status: async () => ({ok:true,data:copy(runtime)}),
   operation_progress: async () => ({ok:true,data:copy(operation)}),
   inventory: async () => ({ok:true,data:[{appid:42,name:'Demo'}]}),
   inspect_game: async id => {inspectCount++;return {ok:true,data:{...copy(info),appid:id}};},
@@ -101,7 +103,9 @@ methods.opti_confirm=async(_id,actual)=>{
   return {ok:true,data:true};
 };
 function button(label){return nodes(render()).find(n=>n.type==='button'&&n.props.children===label)?.props;}
+info.runtime_ready=false;info.automatic.reason='XMX 运行组件未就绪。';
 button('刷新').onClick();await settle();
+assert.equal(toggle().disabled,true);assert.equal(button('安装 Opti 0.9.4').disabled,false,'Opti install stays available without the XMX runtime');
 button('安装 Opti 0.9.4').onClick();await new Promise(resolve=>setTimeout(resolve,20));
 for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
 assert.match(textOf(render()),/正在下载 Opti/);assert.match(textOf(render()),/1\.0 MiB.*2\.0 MiB.*50%/);
@@ -112,6 +116,7 @@ assert.doesNotMatch(textOf(render()),/50%/,'unknown total must not invent a perc
 releaseDownload();await settle();
 operation={...operation,running:false,phase:'completed',revision:3};for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
 assert.equal(installCount,1);assert.equal(current,'/opti/launch %command%');assert.ok(button('打开 Opti 面板'));
+info.runtime_ready=true;info.automatic.reason='';
 button('高级设置').onClick();
 assert.ok(button('卸载 Opti'));assert.ok(button('回退上次操作'));
 const version=nodes(render()).find(n=>n.type==='select'&&n.props.label==='Opti 版本');
@@ -227,3 +232,28 @@ assert.equal(nodes(render()).find(n=>n.type==='select'&&n.props.label==='游戏'
 for(const cleanup of cleanups)cleanup();
 assert.equal(progressTimeouts.size,0);
 console.log('PASS: backend epoch reconnect, deferred confirmation refresh, hung snapshot timeout/late-reply refusal and saved-game selection.');
+
+// The global runtime button works without a game and never starts on mount.
+cleanups.length=0;slots.length=0;effects.length=0;let runtimeCalls=0, finishRuntime;
+methods.inventory=async()=>({ok:true,data:[]});
+methods.runtime_install=async()=>{
+  runtimeCalls++;
+  operation={...operation,kind:'runtime_install',operation_id:'runtime-1',appid:null,phase:'downloading',running:true,downloaded_bytes:1048576,total_bytes:195433378,revision:2};
+  await new Promise(resolve=>{finishRuntime=resolve;});
+  runtime.ready=true;operation={...operation,running:false,phase:'completed',revision:3};
+  return {ok:true,data:copy(runtime)};
+};
+render();for(const effect of effects){const cleanup=effect();if(cleanup)cleanups.push(cleanup);}await settle();
+assert.equal(runtimeCalls,0);assert.match(textOf(button('下载并配置 XMX 运行环境').description),/195\.4 MB/);
+button('下载并配置 XMX 运行环境').onClick();
+button('下载并配置 XMX 运行环境').onClick();await new Promise(resolve=>setTimeout(resolve,20));
+for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
+assert.equal(runtimeCalls,1);assert.match(textOf(render()),/正在下载 XMX 运行环境/);assert.match(textOf(render()),/1\.0 MiB/);
+finishRuntime();await settle();assert.ok(button('XMX 运行环境已就绪').disabled);
+assert.match(textOf(render()),/XMX 运行环境已配置/);
+for(const cleanup of cleanups)cleanup();cleanups.length=0;slots.length=0;effects.length=0;
+runtime={...runtime,ready:false,available:false,availability_message:'Pinned runtime release not published'};
+render();for(const effect of effects){const cleanup=effect();if(cleanup)cleanups.push(cleanup);}await settle();
+assert.equal(button('下载并配置 XMX 运行环境').disabled,true);assert.match(textOf(button('下载并配置 XMX 运行环境').description),/not published/);
+for(const cleanup of cleanups)cleanup();
+console.log('PASS: global explicit runtime action, no automatic download, size/progress/outcome, duplicate guard and unpublished-release state.');
