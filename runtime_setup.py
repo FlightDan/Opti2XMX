@@ -104,7 +104,8 @@ def runtime_lock(path):
     # O_NOFOLLOW also closes the final-component link race on our lock file.
     fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
-        if os.fstat(fd).st_uid != os.getuid() or not stat.S_ISREG(os.fstat(fd).st_mode):
+        if (os.fstat(fd).st_uid != os.getuid() or not stat.S_ISREG(os.fstat(fd).st_mode)
+                or os.fstat(fd).st_mode & 0o022):
             raise RuntimeError('Invalid runtime install lock owner')
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -116,6 +117,18 @@ def runtime_lock(path):
 
 
 class RuntimeMixin:
+    def _runtime_private_directories(self, path):
+        # A writable parent could allow another UID to swap staging after hash
+        # verification, before the validated driver is loaded in a subprocess.
+        for directory in (path, *path.parents):
+            if directory.exists():
+                self.runtime().owned_directory(directory)
+                if directory.stat().st_mode & 0o022:
+                    raise RuntimeError('Runtime data directories must not be group or world writable: ' + str(directory))
+            if directory == self.home:
+                return
+        raise RuntimeError('Runtime staging must remain inside the user home')
+
     def _runtime_config_bytes(self):
         config = self.root / 'runtime.json'
         if config.is_symlink() or (config.exists() and (not config.is_file() or config.stat().st_uid != os.getuid())):
@@ -149,7 +162,7 @@ class RuntimeMixin:
             if (self.root / 'runtime.json').is_symlink():
                 raise RuntimeError('Runtime configuration cannot be a symlink')
             self.root.mkdir(parents=True, exist_ok=True)
-            rt.owned_directory(self.root)
+            self._runtime_private_directories(self.root)
             with runtime_lock(self.root / '.runtime-install.lock'):
                 return self._runtime_install(descriptor, identity, self._runtime_config_bytes())
         except Exception as error:
@@ -161,7 +174,7 @@ class RuntimeMixin:
         parent = self.root / 'runtimes'
         rt.no_symlink_parents(parent / 'placeholder')
         parent.mkdir(mode=0o700, exist_ok=True)
-        rt.owned_directory(parent)
+        self._runtime_private_directories(parent)
         destination = parent / (descriptor['version'] + '-' + descriptor['sha256'][:16] + '-' + uuid.uuid4().hex)
         # No replacement of an existing runtime: launchers may still reference it.
         if destination.exists() or destination.is_symlink():

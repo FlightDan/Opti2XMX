@@ -62,6 +62,8 @@ class RuntimeTests(unittest.TestCase):
             item = patch(target, side_effect=value); item.start(); self.addCleanup(item.stop)
         if not hasattr(os, 'getuid'):
             item = patch('runtime_setup.os.getuid', return_value=0, create=True); item.start(); self.addCleanup(item.stop)
+        if os.name != 'posix':
+            item = patch.object(self.manager, '_runtime_private_directories'); item.start(); self.addCleanup(item.stop)
 
     def assert_clean(self, config=None):
         path = self.manager.root / 'runtime.json'
@@ -139,6 +141,18 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'changed during download'):
             self.manager.runtime_install()
         self.assert_clean(b'external change')
+
+    @unittest.skipUnless(os.name == 'posix', 'Linux permission bits')
+    def test_writable_runtime_ancestor_rejected_before_download(self):
+        self.manager.root.mkdir(parents=True)
+        self.manager.root.parent.chmod(0o777)
+        try:
+            with patch('runtime_setup.urllib.request.urlopen', side_effect=AssertionError('Network forbidden')):
+                with self.assertRaisesRegex(RuntimeError, 'group or world writable'):
+                    self.manager.runtime_install()
+            self.assert_clean()
+        finally:
+            self.manager.root.parent.chmod(0o700)
 
     def test_archive_traversal_links_devices_and_bomb_rejected(self):
         extras = []

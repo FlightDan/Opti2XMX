@@ -207,20 +207,43 @@ def stock_icds():
     return paths
 
 
+def host_environment():
+    # Decky's frozen PluginLoader exports its bundled loader libraries. Host
+    # tools need the original environment, and are never PluginLoader itself.
+    env = os.environ.copy()
+    original = env.pop('LD_LIBRARY_PATH_ORIG', None)
+    if original:
+        env['LD_LIBRARY_PATH'] = original
+    else:
+        env.pop('LD_LIBRARY_PATH', None)
+    env.pop('PYTHONHOME', None)
+    env.pop('PYTHONPATH', None)
+    return env
+
+
+def host_python(env):
+    python = shutil.which('python3', path=env.get('PATH'))
+    if not python:
+        raise FileNotFoundError('Host python3 is required for XMX validation')
+    return python
+
+
 def driver_check(package, icd):
     """Resolve dependencies and enumerate a GPU, in child processes only."""
     lib = package / "lib/libvulkan_intel.so"
     try:
-        result = subprocess.run(["ldd", str(lib)], capture_output=True, text=True, timeout=20)
+        env = host_environment()
+        python = host_python(env)
+        result = subprocess.run(["ldd", str(lib)], env=env, capture_output=True, text=True, timeout=20)
         report = result.stdout + result.stderr
         if result.returncode or "not found" in report:
             return False, "ldd failed or dependencies missing:\n" + report
         result = subprocess.run(
-            [sys.executable, "-c", "import ctypes,sys; ctypes.CDLL(sys.argv[1], mode=ctypes.RTLD_LOCAL)", str(lib)],
-            capture_output=True, text=True, timeout=20)
+            [python, "-c", "import ctypes,sys; ctypes.CDLL(sys.argv[1], mode=ctypes.RTLD_LOCAL)", str(lib)],
+            env=env, capture_output=True, text=True, timeout=20)
         if result.returncode:
             return False, "driver load failed:\n" + result.stderr
-        env = dict(os.environ, VK_DRIVER_FILES=str(icd), VK_LOADER_LAYERS_DISABLE="*")
+        env.update(VK_DRIVER_FILES=str(icd), VK_LOADER_LAYERS_DISABLE="*")
         result = subprocess.run(["vulkaninfo", "--summary"], env=env, capture_output=True, text=True, timeout=20)
         report = result.stdout + result.stderr
         if result.returncode or "deviceName" not in report:
@@ -250,17 +273,18 @@ def compiler_check(package):
         if not matches:
             return False, "Required IGC libraries libigc.so*/libigdfcl.so* are missing"
         libraries.append(matches[0])
-    env = os.environ.copy()
+    env = host_environment()
     paths = [str(igc), str(neo / "lib/x86_64-linux-gnu")]
     if env.get("LD_LIBRARY_PATH"):
         paths.append(env["LD_LIBRARY_PATH"])
     env["LD_LIBRARY_PATH"] = ":".join(paths)
     try:
+        python = host_python(env)
         result = subprocess.run(["bash", "-n", str(helper)], env=env,
                                 capture_output=True, text=True, timeout=20)
         if result.returncode:
             return False, "Compiler helper syntax failed:\n" + result.stderr
-        result = subprocess.run([sys.executable, "-c",
+        result = subprocess.run([python, "-c",
                                  "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())", str(packer)],
                                 env=env, capture_output=True, text=True, timeout=20)
         if result.returncode:
@@ -272,7 +296,7 @@ def compiler_check(package):
             if result.returncode or "not found" in report:
                 return False, "Compiler dependencies failed:\n" + report
         result = subprocess.run(
-            [sys.executable, "-c",
+            [python, "-c",
              "import ctypes,sys; [ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL) for p in sys.argv[1:]]",
              *map(str, libraries)], env=env, capture_output=True, text=True, timeout=20)
         if result.returncode:

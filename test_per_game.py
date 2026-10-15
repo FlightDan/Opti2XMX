@@ -394,6 +394,26 @@ class BackupTests(unittest.TestCase):
         self.assertIn(["ldd", str(igc / "libigc.so.2")], commands)
         self.assertIn(["ldd", str(igc / "libigdfcl.so.2")], commands)
 
+    def test_frozen_decky_preflight_uses_host_python_and_clean_environment(self):
+        (self.package / 'igc/igc/local/lib/libigdfcl.so.2').write_text('fixture')
+        calls = []
+        def successful(command, **kwargs):
+            calls.append((command, kwargs['env']))
+            return subprocess.CompletedProcess(command, 0, 'deviceName = Intel fixture', '')
+        with patch.object(tool.sys, 'executable', '/decky/PluginLoader'), \
+             patch.object(tool.shutil, 'which', return_value='/usr/bin/python3'), \
+             patch.dict(tool.os.environ, {'LD_LIBRARY_PATH': '/decky/lib', 'LD_LIBRARY_PATH_ORIG': '/host/lib',
+                                          'PYTHONHOME': '/decky', 'PYTHONPATH': '/decky'}, clear=False), \
+             patch.object(tool.subprocess, 'run', side_effect=successful):
+            self.assertTrue(tool.driver_check(self.package, self.root / 'fixture.json')[0])
+            self.assertTrue(tool.compiler_check(self.package)[0])
+        python_calls = [(command, env) for command, env in calls if '-c' in command]
+        self.assertEqual(len(python_calls), 3)
+        for command, env in python_calls:
+            self.assertEqual(command[0], '/usr/bin/python3')
+            self.assertNotIn('/decky', env.get('LD_LIBRARY_PATH', ''))
+            self.assertNotIn('PYTHONHOME', env); self.assertNotIn('PYTHONPATH', env)
+
     def test_missing_compiler_never_selects_usable_driver_xmx_path(self):
         self.install()
         (self.package / "igc/neo/bin/ocloc").unlink()
