@@ -154,9 +154,40 @@ englishOpti.props.onChange(false);await settle();
 assert.match(notifications.at(-1).body,/game is still running/);
 assert.equal(nodes(render()).find(n=>n.props?.label==='Opti injection').props.checked,true);
 context.document.documentElement.lang='zh-cn';
-assert.equal(textOf(toggle().description),'仅支持 Intel 设备。\n为游戏启用 XMX 加速，使兼容的游戏中的 XeSS 帧生成可以正常使用。\n更改状态前请先关闭游戏！');
+assert.equal(textOf(toggle().description),'仅支持 Intel 设备。\n启用 Intel XMX 执行路径；帧生成仍需游戏、运行时和 Proton 支持。\n更改状态前请先关闭游戏！');
 assert.equal(textOf(optiToggle().description),'游戏原生支持 XeSS 帧生成时，请关闭此选项。\n使用 OptiScaler 修改游戏内的超分辨率/帧生成设置');
 console.log('PASS: Steam language takes precedence; bilingual descriptions, controls and running-game error.');
+// Only XeFG exposes the experimental request; saving and undo do not touch launch options.
+const multiplier=()=>nodes(render()).find(n=>n.type==='select'&&n.props.label==='XeSS FG 倍率（实验）')?.props;
+assert.equal(multiplier(),undefined);
+nodes(render()).find(n=>n.type==='select'&&n.props.label==='帧生成输出').props.onChange({data:'xefg'});
+assert.equal(multiplier().selectedOption,'2');
+assert.equal(multiplier().rgOptions.map(x=>x.data).join(','),'2,3,4');
+multiplier().onChange({data:'4'});
+let settingsCalls=0,restoreSettingsCalls=0;
+const launchBeforeSettings=current;
+methods.opti_settings=async(id,value,reset)=>{
+  settingsCalls++;assert.equal(id,42);assert.equal(reset,false);assert.equal(value.fg,'xefg');assert.equal(value.fg_multiplier,'4');
+  info.opti.settings=copy(value);info.opti.settings_rollback=true;return {ok:true,data:true};
+};
+methods.opti_restore_settings=async(id)=>{
+  restoreSettingsCalls++;assert.equal(id,42);info.opti.settings={sr:'xess',fg:'native',fg_input:'upscaler',spoof:'real',fg_multiplier:'2'};
+  info.opti.settings_rollback=false;info.opti.settings_recovery=false;return {ok:true,data:true};
+};
+button('保存设置').onClick();await settle();
+assert.equal(settingsCalls,1);assert.equal(multiplier().selectedOption,'4');assert.ok(button('撤销上次设置'));
+context.document.documentElement.lang='en';
+assert.ok(nodes(render()).some(n=>n.props?.label==='XeSS FG multiplier (experimental)'));
+assert.ok(button('Undo last settings change'));
+context.document.documentElement.lang='zh-cn';
+button('撤销上次设置').onClick();await settle();assert.equal(restoreSettingsCalls,1);assert.equal(multiplier(),undefined);
+assert.equal(current,launchBeforeSettings);
+info.opti.settings_recovery=true;button('刷新').onClick();await settle();
+assert.equal(button('保存设置').disabled,true);assert.equal(button('恢复默认').disabled,true);assert.ok(button('恢复中断的设置'));
+assert.equal(toggle().disabled,true);assert.equal(optiToggle().disabled,true);assert.equal(button('安装所选版本').disabled,true);
+assert.equal(button('恢复中断的设置').disabled,false);
+button('恢复中断的设置').onClick();await settle();assert.equal(restoreSettingsCalls,2);
+console.log('PASS: experimental 2x/3x/4x request, bilingual copy, independent undo/recovery and unchanged launch options.');
 // Reopening attaches to a backend operation without starting a second install.
 for(const cleanup of cleanups)cleanup();cleanups.length=0;slots.length=0;effects.length=0;
 operation={...operation,operation_id:'download-2',phase:'downloading',running:true,downloaded_bytes:3145728,total_bytes:null,revision:10};

@@ -89,5 +89,8 @@ class Plugin:
     async def opti_settings(self, appid, settings, reset=False):
         return await self._call('opti_settings', appid, settings, reset)
 
+    async def opti_restore_settings(self, appid):
+        return await self._call('opti_restore_settings', appid)
+
     async def opti_panel(self, appid):
         return await self._call('opti_panel', appid)

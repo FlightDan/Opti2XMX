@@ -259,6 +259,9 @@ class Manager(OptiMixin, RuntimeMixin):
         # Only replace launchers we understand; arbitrary chains may copy DLLs
         # after us or override the environment. Never silently discard them.
         owned = self.opti_record(appid)
+        self.opti_require_settings_complete(owned)
+        if owned and owned.get('pending'):
+            raise RuntimeError('上次操作待完成，请先完成启动项设置或回退')
         if old_launch not in ('', '%command%', '~/fgmod/fgmod %command%', owned['launch'] if owned and owned['status']=='active' else None):
             raise RuntimeError('检测到自定义启动项，请先保留并清理，首版不自动合并')
         if route == 'native' and old_launch == '~/fgmod/fgmod %command%':
@@ -328,14 +331,12 @@ class Manager(OptiMixin, RuntimeMixin):
                     record['files'].append(dict(path=str(p), original=str(original), applied=str(applied)))
                     self.save(record)
                     rt.atomic_copy(applied, p)
-                config = state / 'xmx/game.conf'
-                dll = rt.prefix_dll_path(prefix)
-                winpath = 'C:\\' + str(dll.parent.relative_to(prefix / 'drive_c')).replace('/', '\\')
-                text = config.read_text() + '\nexport INTC_ALT_DRIVER_EXTENSIONS_PATH=' + shlex.quote(winpath) + '\n'
-                rt.atomic_text(config, text)
-                overrides = 'igdext64=n,b' + (';dxgi=n,b' if route == 'opti' else '')
+                # Core owns the shim environment. Its recorded path is authoritative,
+                # including when reading a journal made with the legacy DriverStore path.
+                record['shim_path'] = str(rt.recorded_dll_path(rt.load(state / 'xmx')))
                 launcher = '#!/bin/bash\nset -eu\n'
-                launcher += 'export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+$WINEDLLOVERRIDES;}' + overrides + '"\n'
+                if route == 'opti':
+                    launcher += rt.dll_overrides_config('dxgi')
                 launcher += 'exec ' + shlex.quote(str(state / 'xmx/launch.sh')) + ' "$@"\n'
                 rt.atomic_text(state / 'launch.sh', launcher, mode=0o700)
                 record['launch'] = shlex.quote(str(state / 'launch.sh')) + ' %command%'
@@ -370,6 +371,7 @@ class Manager(OptiMixin, RuntimeMixin):
     def restore(self, appid, actual):
         rt = self.runtime(); rt.ordinary_user()
         self.game(appid)
+        self.opti_require_settings_complete(self.opti_record(appid))
         record = self.state(appid)
         if not record or record['status'] == 'restored':
             raise RuntimeError('没有需要恢复的接入')

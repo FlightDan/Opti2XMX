@@ -4,7 +4,9 @@
 
 **在 SteamOS 上按游戏管理 OptiScaler 和 Intel XeSS XMX 的 Decky 插件。**
 
-版本 **0.2.3** · AGPL-3.0-only 许可证
+版本 **0.2.4** · AGPL-3.0-only 许可证
+
+本次发布新增实验性 XeSS FG 2x/3x/4x 请求、独立设置撤销，以及防止 Proton 覆盖的 XMX shim 路径。已在一台 Intel 掌机完成赛博朋克 2077 短时基准与回滚测试，FG 控件继续保留实验性标记。见[帧生成测试与恢复说明](docs/FRAME_GENERATION.md)。
 
 ## 功能
 
@@ -13,6 +15,7 @@
 - 为兼容的 Intel 设备按游戏开启或恢复 XMX 配置。
 - 独立开关 Opti 注入，保留 XMX 设置和备份。
 - 设置超分、帧生成输出和显卡身份，打开 Opti 面板。
+- 请求实验性 Opti XeSS FG 2x/3x/4x 输出，支持独立设置撤销和中断恢复。
 - 中英文界面，跟随 Steam 语言。
 - 下载进度显示实际字节数、已知总量，以及解压／安装阶段；总量未知时不显示百分比。忙碌和错误提示持续可见。
 
@@ -30,17 +33,27 @@
 
 ![Opti2XMX 高级设置：超分、帧生成和显卡身份](assets/screenshots/advanced-en.png)
 
+赛博朋克 2077 2.31 实际内置基准：请求 XeSS FG 4x、光追关闭，显示 OptiScaler 英文性能 OSD：
+
+![赛博朋克 2077 实机基准和英文 OptiScaler 性能 OSD，场景 1](assets/screenshots/cyberpunk-xess-4x-en-01.png)
+
+![赛博朋克 2077 实机基准和英文 OptiScaler 性能 OSD，场景 2](assets/screenshots/cyberpunk-xess-4x-en-02.png)
+
+![赛博朋克 2077 实机基准和英文 OptiScaler 性能 OSD，场景 3](assets/screenshots/cyberpunk-xess-4x-en-03.png)
+
+以上为实际游戏画面。仅凭 OSD 不能确认实际倍率或屏幕扫描帧率，另见[验证证据与边界](docs/FRAME_GENERATION.md)。
+
 ## 使用条件
 
 - Linux / SteamOS 原生 Steam、Decky Loader，以及至少运行过一次的 Proton 游戏。
-- XMX 需要兼容的 Intel 硬件，以及独立的 XMX 运行库、修改版 ANV 和编译器环境。可点击按钮下载本次发布的固定版本运行环境（186.5 MiB），也能使用已准备的运行环境。参见[运行环境说明](docs/RUNTIME.md)。
+- XMX 需要兼容的 Intel 硬件，以及独立的 XMX 运行库、修改版 ANV 和编译器环境。可点击按钮从 GitHub 下载固定版本运行环境（186.5 MiB），也能使用已准备的运行环境。参见[运行环境说明](docs/RUNTIME.md)。
 - Opti 解压需要系统 `7z`；打开面板需要 `xdotool`。XMX 检查还会使用 `bash`、`ldd` 和 `vulkaninfo`。
 
 XMX 路线在 Intel ONEXPLAYER 3 上开发。AMD Steam Deck 不具备 Intel XMX 加速能力。目前未完成广泛设备、游戏兼容性验证，也未获得 Decky 商店收录。
 
 ## 安装
 
-从 [Releases 页面](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.3)下载 `opti2xmx-0.2.3.zip`，也可按下方步骤构建 ZIP。
+从 [Releases 页面](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.4)下载 `opti2xmx-0.2.4.zip`，也可按下方步骤构建 ZIP。
 进入 Decky 设置，启用开发者模式，使用 **Install Plugin from ZIP File / 从 ZIP 文件安装插件**（名称可能随 Loader 版本变化），选择安装包后打开 Opti2XMX。
 
 插件以 Steam 用户身份运行，加载插件本身不会修改游戏。安装包不包含上游 DLL、私有运行库二进制、游戏文件或生成的编译缓存。
@@ -61,6 +74,8 @@ XMX 依赖兼容的 XeSS 接口，本插件不是全局 Gamescope 超分。FSR1 
 
 XMX 记录保存在 `~/.local/share/opti2xmx/games/<appid>/`，Opti 备份保存在 `~/.local/share/opti2xmx/opti/<appid>/`。未完成操作可继续或回退；DLL 被其他工具修改时会阻止恢复，避免覆盖。卸载 Decky 插件**不会**恢复游戏或删除备份，请先退出游戏并在插件内完成恢复。
 
+设置撤销保留每个受管理文件各自的原始内容。OptiScaler 自动保存产生的纯 INI 格式变化，会在严格确认选项名称、值和 DEFAULT 归属一致后归档并接受；歧义语法、真实值变化和备份副本变化仍会阻止恢复。新建 XMX 配置使用独立的前缀 shim 路径，避免 Proton 替换 DriverStore 副本；已有配置需先恢复再开启，才能使用新路径。
+
 默认从官方 GitHub Release 下载 Opti。可选第三方镜像 `ghfast.top`、`gh-proxy.com` 仅接收公开下载地址，不接收账号凭据；镜像的可用性和内容不受本项目控制。
 
 ## 构建与测试
@@ -76,7 +91,7 @@ python3 -B -m unittest discover -v
 python3 package_plugin.py
 ```
 
-输出为 `opti2xmx-0.2.3.zip`，包含 Python 后端、构建后的前端、固定运行环境描述、文档和许可证，不含运行库 DLL 和驱动；仓库中的截图不放入安装 ZIP，保持小体积。测试夹具覆盖恢复、中断、运行环境校验／解压失败和文件冲突，不能替代真实游戏和硬件测试。上方截图为之前的 0.2.2 界面。
+输出为 `opti2xmx-0.2.4.zip`，包含 Python 后端、构建后的前端、固定运行环境描述、文档和许可证，不含运行库 DLL 和驱动；仓库中的截图不放入安装 ZIP，保持小体积。测试夹具覆盖恢复、中断、运行环境校验／解压失败和文件冲突，不能替代真实游戏和硬件测试。上方插件截图为之前的 0.2.2 界面。
 
 ## 开发与致谢
 

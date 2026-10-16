@@ -15,7 +15,7 @@ import sys
 import tempfile
 
 
-DLL_REL = Path("drive_c/windows/system32/driverstore/filerepository/igd_faux.inf_1/igdext64.dll")
+DLL_REL = Path("drive_c/opti2xmx-driver/igdext64.dll")
 OWNER_REL = Path(".oxp3-xess-owner.json")
 DIAGNOSTICS = ("igdext_kernels", "igdext_dump", "igdext_trace.log", "igdext_xell.log")
 
@@ -26,6 +26,29 @@ def dxgi_identity_config():
     return ('\n# Opti2XMX: retain Intel identity through DXVK\n'
             'export DXVK_CONFIG="${DXVK_CONFIG:+$DXVK_CONFIG;}dxgi.customVendorId = 8086;'
             'dxgi.customDeviceId = -1;dxgi.customDeviceDesc = \\\"\\\""\n')
+
+
+def dll_overrides_config(*names):
+    """Replace only our DLL names, preserving unrelated inherited Wine overrides."""
+    code = ('import sys; names=set(sys.argv[2:]); parts=[]\n'
+            'for item in sys.argv[1].split(";"):\n'
+            ' key,sep,value=item.partition("="); aliases=key.split(",")\n'
+            ' kept=[alias for alias in aliases if alias.strip().lower() not in names]\n'
+            ' if sep and kept: parts.append(",".join(kept)+"="+value)\n'
+            ' elif not sep and item.strip() and key.strip().lower() not in names: parts.append(item)\n'
+            'parts.extend(name+"=n,b" for name in sys.argv[2:]); print(";".join(parts))')
+    return ('WINEDLLOVERRIDES="$(python3 -c ' + shlex.quote(code) +
+            ' "${WINEDLLOVERRIDES-}" ' + ' '.join(shlex.quote(name) for name in names) +
+            ')"\nexport WINEDLLOVERRIDES\n')
+
+
+def dll_environment_config(prefix, dll):
+    drive = windows_prefix_path(prefix, Path('drive_c'))
+    if drive not in dll.parents:
+        raise RuntimeError('DLL path must remain inside its original prefix drive_c')
+    winpath = 'C:\\' + str(dll.parent.relative_to(drive)).replace('/', '\\')
+    return ('export INTC_ALT_DRIVER_EXTENSIONS_PATH=' + shlex.quote(winpath) + '\n' +
+            dll_overrides_config('igdext64'))
 
 
 def absolute(value):
@@ -525,6 +548,7 @@ def install(args):
             text = "# Per-game XMX environment; edit diagnostic switches here while the game is closed.\n"
             text += "".join(f"export {key}={shlex.quote(value)}\n" for key, value in env.items())
             text += dxgi_identity_config()
+            text += dll_environment_config(prefix, dll)
             atomic_text(config, text)
             atomic_copy(Path(__file__).resolve(), state / "runtime.py")
             launch = "#!/bin/sh\nexec python3 " + shlex.quote(str(state / "runtime.py"))

@@ -4,7 +4,9 @@
 
 **A Decky plugin for per-game OptiScaler management and Intel XeSS XMX setup on SteamOS.**
 
-Version **0.2.3** · AGPL-3.0-only license
+Version **0.2.4** · AGPL-3.0-only license
+
+This release adds experimental XeSS FG 2x/3x/4x requests, independent settings undo, and a Proton-safe XMX shim path. Short Cyberpunk 2077 benchmarks and rollback were tested on one Intel handheld; the FG controls retain their experimental label. See [FG testing and recovery](docs/FRAME_GENERATION.md).
 
 ## Features
 
@@ -13,6 +15,7 @@ Version **0.2.3** · AGPL-3.0-only license
 - Enable or restore a per-game XMX setup for compatible Intel hardware.
 - Toggle Opti injection separately, retaining XMX settings and backups.
 - Configure upscaling, frame-generation output and GPU identity; open the Opti overlay.
+- Request experimental Opti XeSS FG 2x/3x/4x output, with independent settings undo and interrupted-write recovery.
 - Chinese and English interface, following Steam's language.
 - Download progress reports actual bytes, known totals and extraction/installation stages. Unknown totals do not display a percentage. Busy and error messages remain visible.
 
@@ -30,17 +33,27 @@ Advanced settings (English interface):
 
 ![Opti2XMX advanced settings showing upscaling, frame generation and GPU identity](assets/screenshots/advanced-en.png)
 
+Cyberpunk 2077 2.31 built-in benchmark, requested XeSS FG 4x, ray tracing off, with OptiScaler's English performance OSD:
+
+![Cyberpunk 2077 benchmark with the English OptiScaler performance OSD, scene 1](assets/screenshots/cyberpunk-xess-4x-en-01.png)
+
+![Cyberpunk 2077 benchmark with the English OptiScaler performance OSD, scene 2](assets/screenshots/cyberpunk-xess-4x-en-02.png)
+
+![Cyberpunk 2077 benchmark with the English OptiScaler performance OSD, scene 3](assets/screenshots/cyberpunk-xess-4x-en-03.png)
+
+These are actual game captures. The OSD alone does not establish the effective multiplier or physical display scanout; see the separate [validation evidence and limits](docs/FRAME_GENERATION.md).
+
 ## Requirements
 
 - Native Steam on Linux/SteamOS, Decky Loader, and a Proton game launched at least once.
-- For XMX: compatible Intel hardware and a separate XMX runtime, patched ANV and compiler stack. Use the runtime button to download the pinned 186.5 MiB runtime from this release, or use an already prepared runtime. See [runtime setup](docs/RUNTIME.md).
+- For XMX: compatible Intel hardware and a separate XMX runtime, patched ANV and compiler stack. Use the runtime button to download the pinned 186.5 MiB runtime from GitHub, or use an already prepared runtime. See [runtime setup](docs/RUNTIME.md).
 - System `7z` for OptiScaler extraction; `xdotool` for the overlay shortcut. XMX checks also use `bash`, `ldd` and `vulkaninfo`.
 
 The XMX route has been developed on an Intel ONEXPLAYER 3. AMD Steam Deck hardware cannot provide Intel XMX acceleration. Broad hardware/game compatibility and Decky Store acceptance are not established.
 
 ## Install
 
-Download `opti2xmx-0.2.3.zip` from the [Releases page](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.3), or build the ZIP using the commands below.
+Download `opti2xmx-0.2.4.zip` from the [Releases page](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.4), or build the ZIP using the commands below.
 In Decky settings, enable developer mode and use **Install Plugin from ZIP File** (wording may vary by Loader version). Choose the built ZIP, then open Opti2XMX.
 
 The plugin runs as the Steam user and does not modify games just by loading. No upstream DLLs, private runtime binaries, game files or generated compiler caches are bundled.
@@ -61,6 +74,8 @@ XMX requires a compatible XeSS path; this is not a global Gamescope upscaler. FS
 
 Per-game journals live in `~/.local/share/opti2xmx/games/<appid>/`; Opti backups in `~/.local/share/opti2xmx/opti/<appid>/`. Pending operations offer completion or rollback. Unexpected DLL modifications block restoration instead of overwriting them. Uninstalling the Decky plugin does **not** restore games or delete backups: restore games through the plugin first, with games stopped.
 
+Settings undo preserves each managed file's original contents. Pure INI formatting changes made by OptiScaler are archived and accepted only when strict option names, values and DEFAULT placement match; ambiguous syntax, changed values and modified backup mirrors still stop recovery. New XMX setups use a dedicated prefix shim path to avoid Proton replacing the DriverStore copy; existing setups must be restored and enabled again to adopt it.
+
 Downloads use official GitHub releases by default. Optional third-party mirrors (`ghfast.top`, `gh-proxy.com`) receive the public asset URL; no account credentials are sent. Their availability and contents are outside this project's control.
 
 ## Build and test
@@ -76,7 +91,7 @@ python3 -B -m unittest discover -v
 python3 package_plugin.py
 ```
 
-The archive is written to `opti2xmx-0.2.3.zip`. It contains the Python backend, built frontend, pinned runtime descriptor, documentation and licenses, without runtime DLLs or drivers. Repository screenshots are omitted from the install ZIP to keep it small. Fixture tests cover restoration, interrupted operations, runtime hash/extraction failures and conflicting files; they do not replace real game and hardware testing. The screenshots above show the prior 0.2.2 interface.
+The archive is written to `opti2xmx-0.2.4.zip`. It contains the Python backend, built frontend, pinned runtime descriptor, documentation and licenses, without runtime DLLs or drivers. Repository screenshots are omitted from the install ZIP to keep it small. Fixture tests cover restoration, interrupted operations, runtime hash/extraction failures and conflicting files; they do not replace real game and hardware testing. The plugin screenshots above show the prior 0.2.2 interface.
 
 ## Development and credits
 
