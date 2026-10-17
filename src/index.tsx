@@ -11,7 +11,7 @@ type Pending = { expected: string; target: string; kind: string };
 type Info = Game & { executables: string[]; libraries: { path: string; version: number[] | null }[];
   optis: string[]; runtime_ready: boolean; prefix_ready: boolean; external_managed: boolean;
   automatic: { executable: string; route: string; reason: string; candidates: string[] }; state: Setup | null;
-  opti?: { managed: boolean; installed: boolean; injection_enabled: boolean; version: string; status: string; rollback: boolean; pending?: Pending; settings_rollback?: boolean; settings_recovery?: boolean; settings: Settings } };
+  opti?: { managed: boolean; installed: boolean; incomplete?: boolean; injection_enabled: boolean; version: string; status: string; rollback: boolean; pending?: Pending; settings_rollback?: boolean; settings_recovery?: boolean; settings: Settings } };
 type Registration = { unregister(): void };
 type RuntimeStatus = {ready:boolean;available:boolean;version:string;size_bytes:number;host_issue:string;error:string;availability_message:string};
 type Operation = {schema:number;instance_id:string;operation_id:string|null;appid:number|null;kind:string;version:string;phase:string;running:boolean;downloaded_bytes:number;total_bytes:number|null;error:string|null;revision:number};
@@ -195,7 +195,7 @@ function Content() {
   }
   const state = info?.state;
   const active = state?.status === 'active' && actualLaunch === state.launch;
-  const managed = !!state && state.status !== 'restored';
+  const managed = !!state && !['restored', 'failed'].includes(state.status);
   const pending = managed && state?.status !== 'active';
   const executable = manualExe || info?.automatic.executable || '';
   const needsChoice = !!info && !info.automatic.executable && info.automatic.candidates.length > 1;
@@ -221,6 +221,10 @@ function Content() {
     });
   }
   const opti = info?.opti;
+  const migrateOpti = !!opti?.installed && !opti.incomplete;
+  const installReason = !info?.prefix_ready ? '请先从 Steam 用 Proton 启动游戏一次，退出后点击刷新。'
+    : !executable ? '请先选择要运行的游戏程序。'
+    : !migrateOpti && managed ? '请先关闭 XMX，再安装、回退或卸载 Opti' : '';
   const optiPending = !!opti?.pending;
   const configBlocked = optiPending || !!opti?.settings_recovery;
   async function toggleOpti(want: boolean) {
@@ -281,28 +285,28 @@ function Content() {
     <DropdownItem label={t('游戏')} layout="below" disabled={busy} selectedOption={appid} strDefaultLabel={t('选择游戏')}
       rgOptions={games.map(g => ({ data: g.appid, label: g.name }))} onChange={v => void select(Number(v.data))} />
     {info ? <>
+      {needsChoice && !managed && <DropdownItem label={t('确认游戏程序')} layout="below" selectedOption={manualExe}
+        description={t('选择与 Steam 启动选项一致的版本。')} disabled={busy}
+        strDefaultLabel={t('请选择要运行的版本')} rgOptions={info.automatic.candidates.map(p => ({data:p,label:p}))}
+        onChange={v => setManualExe(String(v.data))} />}
       <ToggleField label={t('XMX 加速')} checked={active} disabled={busy || blocked || pending || configBlocked}
-        description={t('仅限 Intel；更改前请退出游戏。')} onChange={want => void toggle(want)} />
+        description={t(blocked ? reason || '请先选择要运行的游戏程序。' : '仅限 Intel；更改前请退出游戏。')} onChange={want => void toggle(want)} />
       {opti?.managed && <ToggleField label={t('Opti 注入')} checked={opti.injection_enabled} disabled={busy || pending || configBlocked}
         description={t('原生 XeSS 帧生成请关闭。')}
         onChange={want => void toggleOpti(want)} />}
-      {opti?.installed && opti.injection_enabled !== false && <ButtonItem layout="below" disabled={busy || configBlocked} onClick={() => task(t('正在打开 Opti 面板…'), async () => {
+      {opti?.installed && !opti.incomplete && opti.injection_enabled !== false && <ButtonItem layout="below" disabled={busy || configBlocked} onClick={() => task(t('正在打开 Opti 面板…'), async () => {
         Navigation.CloseSideMenus(); unwrap(await optiPanel(appid)); setMessage(t('已发送面板快捷键。'));
       })}>{t('打开 Opti 面板')}</ButtonItem>}
       {runtimeControl}
       {opti && !opti.managed && !optiPending && <>
-        {!opti.installed && <DropdownItem layout="below" label={t('下载源')} selectedOption={source} disabled={busy}
+        {!migrateOpti && <DropdownItem layout="below" label={t('下载源')} selectedOption={source} disabled={busy}
           description={t('默认官方源；镜像由第三方提供。')}
           rgOptions={options([['github',t('GitHub 官方')],['ghfast',t('ghfast.top（第三方备用）')],['ghproxy',t('gh-proxy.com（第三方备用）')]])} onChange={v=>setSource(String(v.data))} />}
-        <ButtonItem layout="below" disabled={busy || !executable || (!opti.installed && managed)}
-          description={opti.installed ? t('保留文件并建立回退备份。') : undefined}
-          onClick={()=>optiAction(opti.installed?'migrate':'install')}>{opti.installed?t('迁移现有 Opti'):t('安装 Opti 0.9.4')}</ButtonItem>
+        <ButtonItem layout="below" disabled={busy || !!installReason}
+          description={installReason ? t(installReason) : opti.incomplete ? t('缺少注入文件；备份现有文件后重新安装，可回退。') : migrateOpti ? t('保留文件并建立回退备份。') : undefined}
+          onClick={()=>optiAction(migrateOpti?'migrate':'install')}>{opti.incomplete?t('修复安装 Opti 0.9.4'):migrateOpti?t('迁移现有 Opti'):t('安装 Opti 0.9.4')}</ButtonItem>
       </>}
       {optiPending && <ButtonItem layout="below" disabled={busy || opti?.status==='recovery_required'} onClick={()=>optiAction('finish')}>{t('完成 Opti 启动设置')}</ButtonItem>}
-      {needsChoice && !managed && <DropdownItem label={t('确认游戏程序')} layout="below" selectedOption={manualExe}
-        description={t('检测到多个版本，只需确认一次。')} disabled={busy}
-        strDefaultLabel={t('请选择要运行的版本')} rgOptions={info.automatic.candidates.map(p => ({data:p,label:p}))}
-        onChange={v => setManualExe(String(v.data))} />}
       {pending && state?.status === 'pending_launch' && <ButtonItem layout="below" disabled={busy} onClick={() => toggle(true)}>{t('继续开启')}</ButtonItem>}
       {managed && (!active || pending) && <ButtonItem layout="below" disabled={busy} onClick={() => toggle(false)}>{t('恢复原配置')}</ButtonItem>}
       {(opti?.managed || opti?.rollback) && <>
