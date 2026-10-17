@@ -329,9 +329,9 @@ function Content() {
       {opti?.managed && <ToggleField label={t('Opti 注入')} checked={opti.injection_enabled} disabled={busy || pending || configBlocked}
         description={t('原生 XeSS 帧生成请关闭。')}
         onChange={want => void toggleOpti(want)} />}
-      {opti?.installed && !opti.incomplete && opti.injection_enabled !== false && <ButtonItem layout="below" disabled={busy || configBlocked} onClick={() => task(t('正在打开 Opti 面板…'), async () => {
+      {opti?.installed && !opti.incomplete && opti.injection_enabled !== false && <ButtonItem layout="below" disabled={busy || configBlocked} onClick={() => task(t('正在切换 Opti 面板…'), async () => {
         Navigation.CloseSideMenus(); unwrap(await optiPanel(appid)); setMessage(t('已发送面板快捷键。'));
-      })}>{t('打开 Opti 面板')}</ButtonItem>}
+      })}>{t('打开 / 关闭 Opti 面板')}</ButtonItem>}
       {runtimeControl}
       {opti && !opti.managed && !optiPending && <>
         {!migrateOpti && <DropdownItem layout="below" label={t('下载源')} selectedOption={source} disabled={busy}

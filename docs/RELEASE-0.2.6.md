@@ -5,6 +5,7 @@
 - Offer a backed-up repair install for leftover OptiScaler configuration without its dxgi proxy, instead of sending it to migration which cannot handle a missing proxy. Preserve existing configuration, XeSS files and legacy .b backups for rollback/uninstall.
 - A failed XMX journal no longer disables fresh installation. A removed Opti journal neither authorizes replacing a foreign proxy nor carries a disabled injection flag into a new installation.
 - Reject injector conflicts before download and recheck under the prefix lock before writing. Complete existing installations retain the migration path.
+- Label the existing overlay shortcut action "Open / close Opti overlay" (English UI: "Toggle Opti overlay"). Do not infer visibility from previous clicks: official OptiScaler 0.9.4 keeps visibility inside the game process and exposes no external status query; keyboard, in-overlay Close and internal lifecycle paths can all change it. This copy-only follow-up passed local typecheck, build and bilingual frontend checks; deployment and handheld confirmation remain pending while the user tests the preceding build.
 
 Validation: TypeScript typecheck, production bundle, bilingual frontend interactions and 169 Linux fixture tests passed. Independent review completed and the reinstall-after-disabled-uninstall finding fixed. Fixtures cover interrupted copy rollback, exact restoration, foreign proxy conflicts after download and multiple executables.
 

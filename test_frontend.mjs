@@ -124,7 +124,7 @@ for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout
 assert.doesNotMatch(textOf(render()),/50%/,'unknown total must not invent a percentage');
 releaseDownload();await settle();
 operation={...operation,running:false,phase:'completed',revision:3};for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
-assert.equal(installCount,1);assert.equal(current,'/opti/launch %command%');assert.ok(button('打开 Opti 面板'));
+assert.equal(installCount,1);assert.equal(current,'/opti/launch %command%');assert.ok(button('打开 / 关闭 Opti 面板'));
 info.runtime_ready=true;info.automatic.reason='';
 button('高级设置').onClick();
 assert.ok(button('卸载 Opti'));assert.ok(button('回退上次操作'));
@@ -142,10 +142,10 @@ methods.opti_toggle=async(id,want,before)=>{
 button('刷新').onClick();await settle();
 const optiToggle=()=>nodes(render()).find(n=>n.type==='toggle'&&n.props.label==='Opti 注入').props;
 optiToggle().onChange(false);await settle();
-assert.equal(optiToggle().checked,false);assert.equal(button('打开 Opti 面板'),undefined);
+assert.equal(optiToggle().checked,false);assert.equal(button('打开 / 关闭 Opti 面板'),undefined);
 assert.equal(current,'/opti/launch %command%');
 optiToggle().onChange(true);await settle();
-assert.equal(optiToggle().checked,true);assert.ok(button('打开 Opti 面板'));
+assert.equal(optiToggle().checked,true);assert.ok(button('打开 / 关闭 Opti 面板'));
 console.log('PASS: independent Opti injection toggle and hidden panel when disabled.');
 
 context.document={documentElement:{lang:'en'}};
@@ -156,7 +156,7 @@ assert.ok(englishXmx);
 assert.equal(textOf(englishXmx.props.description),'Intel only. Exit the game before changing.');
 const englishOpti=englishNodes.find(n=>n.props?.label==='Opti injection');
 assert.equal(textOf(englishOpti.props.description),'Turn off for native XeSS Frame Generation.');
-assert.ok(button('Open Opti overlay'));assert.ok(button('Uninstall Opti'));
+assert.ok(button('Toggle Opti overlay'));assert.ok(button('Uninstall Opti'));
 methods.opti_toggle=async()=>({ok:false,error:'游戏仍在运行。请从 Steam 退出游戏，再操作 XMX 开关。'});
 englishOpti.props.onChange(false);await settle();
 assert.match(notifications.at(-1).body,/game is still running/);
@@ -333,7 +333,7 @@ info.automatic={executable:'ds.exe',route:'opti',reason:'OptiScaler 文件不完
 info.executables=['ds.exe'];
 info.opti={...info.opti,installed:true,incomplete:true};
 button('刷新').onClick();await settle();
-assert.equal(button('迁移现有 Opti'),undefined);assert.equal(button('打开 Opti 面板'),undefined);
+assert.equal(button('迁移现有 Opti'),undefined);assert.equal(button('打开 / 关闭 Opti 面板'),undefined);
 assert.equal(button('修复安装 Opti 0.9.4').disabled,false);
 assert.match(textOf(button('修复安装 Opti 0.9.4').description),/备份现有文件/);
 let repairCalls=0;
