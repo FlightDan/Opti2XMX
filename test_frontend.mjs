@@ -47,6 +47,12 @@ const context = vm.createContext({
   SP_JSX:{jsx,jsxs:jsx,Fragment:'Fragment'},
   SP_REACT:{useState:hook,useRef:init=>hook({current:init})[0],useEffect:fn=>{
     const n=cursor++;if(!(n in slots)){slots[n]=true;effects.push(fn);}
+  },useSyncExternalStore:(subscribe,getSnapshot)=>{
+    const [value,setValue]=hook(getSnapshot());
+    const n=cursor++;if(!(n in slots)){slots[n]=true;effects.push(()=>{
+      setValue(getSnapshot());return subscribe(()=>setValue(getSnapshot()));
+    });}
+    return value;
   }},
   DFL:{staticClasses:{Title:'title'},PanelSection:'section',PanelSectionRow:'row',ButtonItem:'button',DropdownItem:'select',SliderField:'slider',ToggleField:'toggle'},
   SteamClient:{Apps:{
@@ -309,6 +315,7 @@ methods.inventory=async()=>({ok:true,data:[{appid:42,name:'Control'}]});
 info.state=null;info.prefix_ready=false;
 info.opti={managed:false,installed:false,incomplete:false,injection_enabled:false,version:'',status:'',rollback:false,settings:{sr:'xess',fg:'native',fg_input:'upscaler',spoof:'real'}};
 info.automatic={executable:'',route:'native',reason:'请先从 Steam 用 Proton 启动游戏一次，退出后点击刷新。',candidates:['Control.exe','Control_DX11.exe','Control_DX12.exe']};
+info.executables=[...info.automatic.candidates];
 render();for(const effect of effects){const cleanup=effect();if(cleanup)cleanups.push(cleanup);}await settle();
 assert.match(textOf(toggle().description),/Proton/);
 assert.equal(button('安装 Opti 0.9.4').disabled,true);
@@ -323,6 +330,7 @@ nodes(render()).find(n=>n.props?.label==='确认游戏程序').props.onChange({d
 assert.equal(button('安装 Opti 0.9.4').disabled,false,'Opti install does not require XeSS');
 assert.equal(toggle().disabled,true);assert.match(textOf(toggle().description),/尚未发现 XeSS/);
 info.automatic={executable:'ds.exe',route:'opti',reason:'OptiScaler 文件不完整，需要同目录的 dxgi.dll 和 libxess.dll。',candidates:['ds.exe']};
+info.executables=['ds.exe'];
 info.opti={...info.opti,installed:true,incomplete:true};
 button('刷新').onClick();await settle();
 assert.equal(button('迁移现有 Opti'),undefined);assert.equal(button('打开 Opti 面板'),undefined);
@@ -340,3 +348,36 @@ assert.equal(button('Repair Opti 0.9.4 installation').disabled,false);
 assert.match(textOf(button('Repair Opti 0.9.4 installation').description),/Back up existing files/);
 for(const cleanup of cleanups)cleanup();
 console.log('PASS: Control prerequisites and executable selection, visible XMX reasons, incomplete Death Stranding repair, failed journal and English copy.');
+
+// Native Steam dropdowns unmount Quick Access before invoking their callback.
+function clearUI(){for(const cleanup of cleanups)cleanup();cleanups.length=0;slots.length=0;effects.length=0;}
+async function mountUI(){render();for(const effect of effects){const cleanup=effect();if(cleanup)cleanups.push(cleanup);}await settle();}
+const exeChoice=()=>nodes(render()).find(n=>n.props?.label==='确认游戏程序')?.props;
+const gameChoice=()=>nodes(render()).find(n=>n.props?.label==='游戏')?.props;
+clearUI();context.document.documentElement.lang='zh-cn';savedSelection='42';
+methods.inventory=async()=>({ok:true,data:[{appid:42,name:'Control'},{appid:43,name:'Another game'}]});
+info.state=null;info.prefix_ready=true;info.executables=['Control.exe','Control_DX11.exe','Control_DX12.exe'];
+info.automatic={executable:'',route:'native',reason:'尚未发现 XeSS。请先为此游戏安装 OptiScaler 并运行一次，再刷新。',candidates:[...info.executables]};
+info.opti={...info.opti,installed:false,incomplete:false,managed:false,pending:null};
+await mountUI();const originalExeMenu=exeChoice();
+clearUI();originalExeMenu.onChange({data:'Control_DX12.exe'});await mountUI();
+assert.equal(exeChoice().selectedOption,'Control_DX12.exe','native callback after unmount survives remount');
+assert.equal(button('安装 Opti 0.9.4').disabled,false);
+button('刷新').onClick();await settle();assert.equal(exeChoice().selectedOption,'Control_DX12.exe');
+clearUI();await mountUI();originalExeMenu.onChange({data:'Control_DX11.exe'});
+assert.equal(exeChoice().selectedOption,'Control_DX11.exe','late old-instance callback notifies the already-mounted instance');
+for(const invalid of ['/tmp/evil.exe','../evil.exe','unknown.exe'])originalExeMenu.onChange({data:invalid});
+assert.equal(exeChoice().selectedOption,'Control_DX11.exe','arbitrary paths cannot enter selection');
+info.executables=['Control.exe','Control_DX12.exe'];info.automatic.candidates=[...info.executables];
+button('刷新').onClick();await settle();
+assert.equal(exeChoice().selectedOption,'','removed candidate is invalidated');assert.equal(button('安装 Opti 0.9.4').disabled,true);
+exeChoice().onChange({data:'Control_DX12.exe'});
+let nativeInstallCalls=0;
+methods.opti_install=async(id,exe)=>{assert.equal(id,42);assert.equal(exe,'Control_DX12.exe');nativeInstallCalls++;return {ok:false,error:'fixture stopped before mutation'};};
+button('安装 Opti 0.9.4').onClick();await settle();assert.equal(nativeInstallCalls,1);
+const oldGameMenu=gameChoice();clearUI();oldGameMenu.onChange({data:43});
+assert.equal(savedSelection,'43','game selection is saved synchronously before async inspection');
+await mountUI();assert.equal(gameChoice().selectedOption,43);assert.equal(exeChoice().selectedOption,'','EXE never leaks across appids');
+originalExeMenu.onChange({data:'Control_DX12.exe'});assert.equal(exeChoice().selectedOption,'','late previous-game callback cannot change this game');
+clearUI();
+console.log('PASS: native-menu unmount/callback/remount, late callback subscription, refresh/invalidation, appid isolation and real selected-EXE RPC.');

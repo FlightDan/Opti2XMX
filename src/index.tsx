@@ -1,7 +1,7 @@
 import { t } from './i18n';
 import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, SliderField, ToggleField, staticClasses, Navigation } from '@decky/ui';
 import { callable, definePlugin, toaster } from '@decky/api';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 type Reply<T> = { ok: boolean; data?: T; error?: string };
 type Setup = { status: string; launch?: string; old_launch: string; imported?: boolean };
@@ -15,6 +15,20 @@ type Info = Game & { executables: string[]; libraries: { path: string; version: 
 type Registration = { unregister(): void };
 type RuntimeStatus = {ready:boolean;available:boolean;version:string;size_bytes:number;host_issue:string;error:string;availability_message:string};
 type Operation = {schema:number;instance_id:string;operation_id:string|null;appid:number|null;kind:string;version:string;phase:string;running:boolean;downloaded_bytes:number;total_bytes:number|null;error:string|null;revision:number};
+// Steam moves dropdown menus out of Quick Access and unmounts Content. Menu
+// callbacks must update the session, not only a component that no longer exists.
+type Selection = { appid: number; executables: Record<number, string> };
+let selection: Selection = { appid: 0, executables: {} };
+const selectionListeners = new Set<() => void>();
+const selectionSnapshot = () => selection;
+function subscribeSelection(listener: () => void) {
+  selectionListeners.add(listener);
+  return () => { selectionListeners.delete(listener); };
+}
+function updateSelection(next: Selection) {
+  selection = next;
+  for (const listener of selectionListeners) listener();
+}
 declare const SteamClient: { Apps: {
   RegisterForAppDetails(id: number, callback: (...args: unknown[]) => void): Registration;
   SetAppLaunchOptions(id: number, value: string): void;
@@ -89,6 +103,7 @@ function Content() {
   const acceptedRequest = useRef(0);
   const refreshNeeded = useRef<{appid:number;instance:string;operation:string|null} | null>(null);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
+  const session = useSyncExternalStore(subscribeSelection, selectionSnapshot);
   const busy = localBusy || operation?.running === true;
   function acceptOperation(value: Operation) {
     if (!mounted.current || value.schema !== 1 || !Number.isSafeInteger(value.revision)
@@ -118,7 +133,13 @@ function Content() {
     const sequence = ++loadSequence.current;
     const [data, launch] = await Promise.all([inspect(id).then(unwrap), readLaunch(id)]);
     if (!mounted.current || selected.current !== id || sequence !== loadSequence.current) return data;
-    setInfo(data); setActualLaunch(launch); setManualExe('');
+    const remembered = selection.executables[id] || '';
+    const valid = data.automatic.candidates.includes(remembered) && data.executables.includes(remembered);
+    if (remembered && !valid) {
+      const executables = {...selection.executables}; delete executables[id];
+      updateSelection({...selection, executables});
+    }
+    setInfo(data); setActualLaunch(launch); setManualExe(valid ? remembered : '');
     if (data.opti) setSettings(data.opti.settings);
     setRemoveConfirm(false);
     return data;
@@ -134,13 +155,20 @@ function Content() {
     } finally { lock.current = false; setBusy(false); }
   }
   async function select(id: number) {
+    if (!games.some(game => game.appid === id)) return;
+    localStorage.setItem('opti2xmx-selected', String(id));
+    if (selection.appid !== id) updateSelection({...selection, appid:id});
+    if (!mounted.current) return;
     await task(t('正在检查这个游戏…'), async () => {
       setAppid(id); setInfo(null); setManualExe('');
       selected.current = id;
       await load(id); setMessage('');
-      localStorage.setItem('opti2xmx-selected', String(id));
     });
   }
+  useEffect(() => {
+    if (!busy && session.appid && selected.current !== session.appid && games.some(g => g.appid === session.appid))
+      void select(session.appid);
+  }, [session.appid, games, busy]);
   useEffect(() => {
     mounted.current = true;
     let alive = true, polling = false;
@@ -177,11 +205,11 @@ function Content() {
       try { await readOperation(); } catch { /* Inventory remains usable while snapshot polling reconnects. */ }
       setRuntime(unwrap(await runtimeStatus()));
       const list = unwrap(await inventory()); if (!mounted.current) return; setGames(list);
-      const previous = Number(localStorage.getItem('opti2xmx-selected'));
+      const previous = Number(localStorage.getItem('opti2xmx-selected')) || selection.appid;
       const attached = latestOperation.current;
       const attach = attached?.running || attached?.phase === 'awaiting-launch';
       const id = (attach ? list.find(g => g.appid === attached?.appid)?.appid : undefined) || list.find(g => g.appid === previous)?.appid || list[0]?.appid;
-      if (id) { selected.current = id; setAppid(id); await load(id); setMessage(''); }
+      if (id) { selected.current = id; setAppid(id); updateSelection({...selection,appid:id}); await load(id); setMessage(''); }
       else setMessage(t('未找到已安装的 Steam 游戏。'));
     }, true);
   }, []);
@@ -197,9 +225,11 @@ function Content() {
   const active = state?.status === 'active' && actualLaunch === state.launch;
   const managed = !!state && !['restored', 'failed'].includes(state.status);
   const pending = managed && state?.status !== 'active';
-  const executable = manualExe || info?.automatic.executable || '';
+  const rememberedExe = session.executables[appid] || manualExe;
+  const validManualExe = info?.executables.includes(rememberedExe) && info.automatic.candidates.includes(rememberedExe) ? rememberedExe : '';
+  const executable = info?.automatic.executable || validManualExe;
   const needsChoice = !!info && !info.automatic.executable && info.automatic.candidates.length > 1;
-  const reason = needsChoice && manualExe && info?.automatic.reason === '发现多个游戏程序，请在下面确认一次。'
+  const reason = needsChoice && validManualExe && info?.automatic.reason === '发现多个游戏程序，请在下面确认一次。'
     ? '' : info?.automatic.reason || '';
   const blocked = !managed && (!!reason || !executable);
   async function toggle(want: boolean) {
@@ -285,10 +315,15 @@ function Content() {
     <DropdownItem label={t('游戏')} layout="below" disabled={busy} selectedOption={appid} strDefaultLabel={t('选择游戏')}
       rgOptions={games.map(g => ({ data: g.appid, label: g.name }))} onChange={v => void select(Number(v.data))} />
     {info ? <>
-      {needsChoice && !managed && <DropdownItem label={t('确认游戏程序')} layout="below" selectedOption={manualExe}
+      {needsChoice && !managed && <DropdownItem label={t('确认游戏程序')} layout="below" selectedOption={validManualExe}
         description={t('选择与 Steam 启动选项一致的版本。')} disabled={busy}
         strDefaultLabel={t('请选择要运行的版本')} rgOptions={info.automatic.candidates.map(p => ({data:p,label:p}))}
-        onChange={v => setManualExe(String(v.data))} />}
+        onChange={v => {
+          const value = String(v.data), id = info.appid;
+          if (selection.appid !== id || !info.executables.includes(value) || !info.automatic.candidates.includes(value)) return;
+          updateSelection({...selection, executables:{...selection.executables,[id]:value}});
+          if (mounted.current) setManualExe(value);
+        }} />}
       <ToggleField label={t('XMX 加速')} checked={active} disabled={busy || blocked || pending || configBlocked}
         description={t(blocked ? reason || '请先选择要运行的游戏程序。' : '仅限 Intel；更改前请退出游戏。')} onChange={want => void toggle(want)} />
       {opti?.managed && <ToggleField label={t('Opti 注入')} checked={opti.injection_enabled} disabled={busy || pending || configBlocked}
