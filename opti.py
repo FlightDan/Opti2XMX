@@ -133,6 +133,24 @@ class OptiMixin:
                                   spoof='real' if spoof.lower() == 'false' else
                                   {'0x8086':'intel','0x1002':'amd'}.get(vendor, 'nvidia')))
 
+    def opti_cache_status(self):
+        rt=self.runtime();result={}
+        for version,(tag,filename,_) in RELEASES.items():
+            cache=self.root/'downloads'/tag
+            archive=cache/filename
+            payload=cache/'payload'
+            ready=payload/'ready.json'
+            required=('OptiScaler.dll','OptiScaler.ini',
+                      'OptiScaler/libxess.dll' if version.startswith('10.') else 'libxess.dll')
+            paths=(archive,ready,*(payload/name for name in required))
+            for path in paths:rt.no_symlink_parents(path)
+            cached=archive.is_file() and not archive.is_symlink()
+            prepared=(ready.is_file() and not ready.is_symlink() and
+                      all((payload/name).is_file() and not (payload/name).is_symlink() for name in required))
+            result[version]=dict(cached=cached,prepared=prepared,
+                                 size_bytes=archive.stat().st_size if cached else 0)
+        return result
+
     def opti_package(self, version, source, operation_id=None):
         owned = operation_id is None
         identity = operation_id or self.progress.begin(None, 'opti_download', version)
@@ -145,19 +163,23 @@ class OptiMixin:
             raise
 
     def _opti_package(self, version, source, operation_id):
-        if version not in RELEASES or source not in ('github', 'github-api', 'ghfast', 'ghproxy'):
+        if version not in RELEASES or source not in ('local', 'github', 'github-api', 'ghfast', 'ghproxy'):
             raise ValueError('请选择支持的版本和下载源')
         tag, filename, asset = RELEASES[version]
+        cache = self.root / 'downloads' / tag
+        archive = cache / filename
+        self.runtime().no_symlink_parents(archive)
+        if source == 'local' and (not archive.is_file() or archive.is_symlink()):
+            raise RuntimeError('所选 Opti 版本未找到本地缓存包，请选择在线下载源或选择其他版本。')
         nightly = version.startswith('10.')
         if nightly:
             from fsr import descriptor
             pin = descriptor()['opti_archive']
         repository = 'optiscaler/OptiScaler-nightly' if nightly else 'optiscaler/OptiScaler'
-        cache = self.root / 'downloads' / tag
-        self.runtime().no_symlink_parents(cache / filename)
         cache.mkdir(parents=True, exist_ok=True)
-        archive = cache / filename
         if not archive.exists():
+            if source == 'local':
+                raise RuntimeError('所选 Opti 版本未找到本地缓存包，请选择在线下载源或选择其他版本。')
             url = f'https://github.com/{repository}/releases/download/{tag}/{filename}'
             if source == 'github-api':url=f'https://api.github.com/repos/{repository}/releases/assets/{asset}?download=1'
             elif source == 'ghfast':url='https://ghfast.top/'+url
@@ -340,9 +362,8 @@ class OptiMixin:
                     old=ini_values(target) if target.exists() else configparser.ConfigParser()
                     for section,key,default in [('Upscalers','Dx12Upscaler','xess'),('Menu','Scale','auto'),('Menu','ShortcutKey','auto')]:
                         text=ini_set(text,section,key,old.get(section,key,fallback=default))
-                    if fsr:
-                        from fsr import neutral_fsr
-                        text = neutral_fsr(text)
+                    from fsr import neutral_fsr
+                    text = neutral_fsr(text)
                     for section,key,value in [('Spoofing','Dxgi','false'),('Spoofing','StreamlineSpoofing','false'),
                                                ('FrameGen','Enabled','false'),('FrameGen','FGInput','nofg'),
                                                 ('FrameGen','FGOutput','nofg'),('FrameGen','FGType','nofg'),('OptiFG','Enabled','false'),
@@ -507,7 +528,7 @@ class OptiMixin:
         pending=r['pending']
         if pending.get('xmx_state'):
             x=self.state(appid)
-            if x!=pending['xmx_state']:raise RuntimeError('XMX 状态已变化，请刷新')
+            if x!=pending['xmx_state']:raise RuntimeError('XMX 状态已变化，请重新打开插件')
             rt=self.runtime()
             with rt.prefix_lock(Path(x['prefix'])):
                 rt.game_idle(Path(x['prefix']),Path(x['executable']).name)
@@ -598,7 +619,7 @@ class OptiMixin:
         x=info['state']
         if x and x['status'] not in ('active','restored','failed'):
             raise RuntimeError('XMX 操作待完成，请先完成或恢复')
-        if r['executable'] not in info['executables']:raise RuntimeError('游戏程序已经变化，请刷新')
+        if r['executable'] not in info['executables']:raise RuntimeError('游戏程序已经变化，请重新打开插件')
         exe=Path(info['game'])/r['executable']
         self._settings_regular(exe)
         ini=exe.parent/'OptiScaler.ini'
@@ -614,6 +635,11 @@ class OptiMixin:
         # never accepted from a settings RPC or settings-undo journal.
         for path in targets:self._settings_regular(path)
         return r,info,ini,targets
+
+    def settings_preflight(self, appid):
+        r,info,_,_=self._settings_context(appid)
+        self.runtime().game_idle(Path(info['prefix']),Path(r['executable']).name)
+        return True
 
     def _settings_journal(self, appid, r, ini, targets, after, inactive_original=None):
         rt=self.runtime()
@@ -666,7 +692,7 @@ class OptiMixin:
             rt.game_idle(prefix,Path(r['executable']).name)
             # Reload under the lock so a waiting RPC cannot restore a replaced undo.
             r,info,ini,targets=self._settings_context(appid,True)
-            if Path(info['prefix'])!=prefix:raise RuntimeError('游戏 Proton 环境已变化，请刷新')
+            if Path(info['prefix'])!=prefix:raise RuntimeError('游戏 Proton 环境已变化，请重新打开插件')
             journal=r.get('settings_undo')
             if not journal or journal.get('status') not in ('saved','applying','restoring'):
                 raise RuntimeError('没有可恢复的设置')
@@ -734,7 +760,7 @@ class OptiMixin:
         with rt.prefix_lock(prefix):
             rt.game_idle(prefix,Path(r['executable']).name)
             r,info,ini,targets=self._settings_context(appid)
-            if Path(info['prefix'])!=prefix:raise RuntimeError('游戏 Proton 环境已变化，请刷新')
+            if Path(info['prefix'])!=prefix:raise RuntimeError('游戏 Proton 环境已变化，请重新打开插件')
             if not r['version'].startswith(('0.9','10.')):raise RuntimeError('请先升级 Opti 0.9 或 10 再使用简化设置')
             x=info['state'];active=x and x['status']=='active'
             if active and (settings['sr'] not in ('xess','fsr_xmx') or settings['spoof']!='real'):

@@ -235,9 +235,9 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
         elif not info['runtime_ready']:
             reason = 'XMX 运行组件未就绪。'
         elif not info['prefix_ready']:
-            reason = '请先从 Steam 用 Proton 启动游戏一次，退出后点击刷新。'
+            reason = '请先从 Steam 用 Proton 启动游戏一次，退出后重新打开插件。'
         elif not info['libraries']:
-            reason = '尚未发现 XeSS。请先为此游戏安装 OptiScaler 并运行一次，再刷新。'
+            reason = '尚未发现 XeSS。请先为此游戏安装 OptiScaler 并运行一次，然后重新打开插件。'
         elif not candidates:
             reason = '未识别到可接入的游戏程序，请检查游戏安装。'
         elif not executable:
@@ -275,7 +275,7 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
         game = Path(info['game']); prefix = Path(info['prefix'])
         exe = game / executable
         if not exe.is_file() or exe.is_symlink():
-            raise RuntimeError('游戏程序已经变化，请刷新')
+            raise RuntimeError('游戏程序已经变化，请重新打开插件')
         rt.no_symlink_parents(exe)
         rt.game_idle(prefix, exe.name)
         targets = [game / lib['path'] for lib in info['libraries']]
@@ -368,7 +368,7 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
             raise RuntimeError('没有待确认的接入')
         expected = record.get('launch') if record['status'] in ('pending_launch', 'active') else record['old_launch']
         if actual != expected:
-            raise RuntimeError('Steam 启动项读回不一致，请恢复或刷新后重试')
+            raise RuntimeError('Steam 启动项读回不一致，请恢复或重新打开插件后重试')
         if record['status'] in ('pending_launch', 'active'):
             record['status'] = 'active'
         elif record['status'] == 'pending_restore_launch':

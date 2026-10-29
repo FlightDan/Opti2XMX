@@ -26,7 +26,7 @@ class Plugin:
     async def _call(self, name, *args):
         if not hasattr(self, 'manager'):
             await self._main()
-        if (name in ('opti_install', 'runtime_install', 'fsr_prepare', 'fsr_import') and self.lock.locked()) or (name not in ('inventory', 'inspect_game', 'runtime_status', 'fsr_status') and (self.install_active or self.manager.progress.snapshot()['running'])):
+        if (name in ('opti_install', 'runtime_install', 'fsr_prepare', 'fsr_import') and self.lock.locked()) or (name not in ('inventory', 'inspect_game', 'runtime_status', 'fsr_status', 'opti_cache_status') and (self.install_active or self.manager.progress.snapshot()['running'])):
             return {'ok': False, 'error': 'Opti 操作仍在进行，请等待完成。'}
         async with self.lock:
             installing = name in ('opti_install', 'runtime_install', 'fsr_prepare', 'fsr_import')
@@ -35,7 +35,10 @@ class Plugin:
                 return {'ok': True, 'data': await asyncio.to_thread(getattr(self.manager, name), *args)}
             except Exception as error:
                 message = str(error)
-                if 'Game is running' in message or 'Prefix is in use' in message:
+                if name in ('settings_preflight', 'opti_settings', 'opti_restore_settings') and any(
+                        phrase in message for phrase in ('Game is running', 'Prefix is in use', 'Cannot establish prefix idle state')):
+                    message = '游戏正在运行，请先退出游戏再更改设置。'
+                elif 'Game is running' in message or 'Prefix is in use' in message:
                     message = '游戏仍在运行。请从 Steam 退出游戏，再操作 XMX 开关。'
                 return {'ok': False, 'error': message}
             finally:
@@ -52,6 +55,9 @@ class Plugin:
 
     async def runtime_status(self):
         return await self._call('runtime_status')
+
+    async def opti_cache_status(self):
+        return await self._call('opti_cache_status')
 
     async def runtime_install(self):
         return await self._call('runtime_install')
@@ -97,6 +103,9 @@ class Plugin:
 
     async def opti_settings(self, appid, settings, reset=False):
         return await self._call('opti_settings', appid, settings, reset)
+
+    async def settings_preflight(self, appid):
+        return await self._call('settings_preflight', appid)
 
     async def opti_restore_settings(self, appid):
         return await self._call('opti_restore_settings', appid)

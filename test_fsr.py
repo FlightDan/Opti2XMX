@@ -111,6 +111,33 @@ class FsrTests(Tests):
         self.assertEqual(self.m.inspect_game(42)['opti']['settings']['sr'], 'xess')
         self.assertFalse(self.m.inspect_game(42)['opti']['settings_rollback'])
 
+    def test_version_reinstall_resets_old_v10_fsr_selection_and_keeps_menu(self):
+        old = self.prepare_fsr()
+        from manager import ini_set
+        ini = self.game / 'OptiScaler.ini'
+        text = ini.read_text()
+        for section,key,value in [('Upscalers','Dx12Upscaler','ffx'),('FSR','UpscalerIndex','9'),
+                                  ('Menu','Scale','200'),('Menu','ShortcutKey','F10')]:
+            text = ini_set(text, section, key, value)
+        ini.write_text(text)
+
+        payload = self.home / 'opti09'
+        payload.mkdir()
+        (payload / 'OptiScaler.dll').write_bytes(b'MZ OptiScaler v0.9 fixture')
+        (payload / 'OptiScaler.ini').write_text(
+            '[Upscalers]\nDx12Upscaler=fsr22\n[FSR]\nUpscalerIndex=4\n'
+            '[Menu]\nScale=auto\nShortcutKey=auto\n')
+        (payload / 'libxess.dll').write_bytes(b'new XeSS fixture')
+        with patch.object(self.m, 'opti_package', return_value=payload):
+            pending = self.m.opti_install(42, 'game.exe', old, '0.9.4', 'ghproxy')
+        self.m.opti_confirm(42, pending['target'])
+
+        updated = ini.read_text()
+        self.assertEqual(self.m.inspect_game(42)['opti']['settings']['sr'], 'xess')
+        self.assertIn('UpscalerIndex=auto', updated)
+        self.assertIn('Scale=200', updated)
+        self.assertIn('ShortcutKey=F10', updated)
+
     def test_fsr_cannot_run_on_inactive_or_old_xmx_bridge(self):
         old = self.prepare_fsr()
         settings = dict(sr='fsr_xmx', fg='native', fg_input='upscaler', spoof='real')

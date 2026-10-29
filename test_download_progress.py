@@ -10,6 +10,7 @@ from unittest.mock import patch
 from download_progress import OperationProgress, LIMIT
 from manager import Manager
 from main import Plugin
+from opti import RELEASES
 
 
 class StateChecks(unittest.TestCase):
@@ -77,6 +78,78 @@ class CacheChecks(unittest.TestCase):
             self.assertEqual(self.manager.opti_package('0.9.4', 'github'), payload)
         self.assertEqual(self.manager.progress.snapshot()['downloaded_bytes'], len(data))
 
+    def test_cache_is_shared_across_managers_and_download_sources(self):
+        response, _ = self.response(str(2*1024*1024+6))
+        with patch('opti.urllib.request.urlopen', return_value=response), patch('opti.subprocess.run', side_effect=self.unpack):
+            payload = self.manager.opti_package('0.9.4', 'github')
+        other = Manager(self.directory.name, types.SimpleNamespace(no_symlink_parents=lambda path: None))
+        with patch('opti.urllib.request.urlopen', side_effect=AssertionError('Cache contacted network')), patch('opti.subprocess.run', side_effect=AssertionError('Cache extracted again')):
+            self.assertEqual(other.opti_package('0.9.4', 'ghproxy'), payload)
+
+    def test_local_source_uses_cache_and_never_downloads_on_a_miss(self):
+        tag, filename, _ = RELEASES['0.9.4']
+        cache = self.manager.root / 'downloads' / tag
+        cache.mkdir(parents=True)
+        archive = cache / filename
+        archive.write_bytes(b'7z\xbc\xaf\x27\x1c cached fixture')
+        payload = cache / 'payload'; payload.mkdir()
+        (payload / 'ready.json').write_text('{}')
+        for name in ('OptiScaler.dll', 'OptiScaler.ini', 'libxess.dll'):
+            (payload / name).write_bytes(b'MZ fixture' if name.endswith('.dll') else b'[Upscalers]\n')
+        with patch('opti.urllib.request.urlopen', side_effect=AssertionError('Local source contacted network')), \
+                patch('opti.subprocess.run', side_effect=AssertionError('Prepared cache was extracted again')):
+            self.assertEqual(self.manager.opti_package('0.9.4', 'local'), payload)
+
+        missing = Manager(str(Path(self.directory.name) / 'missing'),
+                          types.SimpleNamespace(no_symlink_parents=lambda path: None))
+        self.assertFalse(missing.root.exists())
+        with patch('opti.urllib.request.urlopen', side_effect=AssertionError('Local source must never download')):
+            with self.assertRaisesRegex(RuntimeError, '未找到本地缓存包'):
+                missing.opti_package('0.9.4', 'local')
+        self.assertFalse(missing.root.exists())
+
+    def test_opti_cache_status_reports_missing_partial_and_prepared_without_writes(self):
+        def tree_snapshot():
+            return {str(path.relative_to(self.directory.name)):
+                    (path.is_dir(), path.stat().st_mtime_ns,
+                     path.read_bytes() if path.is_file() else None)
+                    for path in Path(self.directory.name).rglob('*')}
+
+        before = tree_snapshot()
+        with patch('opti.urllib.request.urlopen', side_effect=AssertionError('Status must not download')):
+            missing = self.manager.opti_cache_status()
+        self.assertEqual(list(missing), list(RELEASES))
+        self.assertEqual(missing, {version:dict(cached=False, prepared=False, size_bytes=0) for version in RELEASES})
+        self.assertEqual(tree_snapshot(), before)
+
+        for version, (tag, filename, _) in RELEASES.items():
+            cache = self.manager.root / 'downloads' / tag
+            cache.mkdir(parents=True, exist_ok=True)
+            (cache / filename).write_bytes(('archive-' + version).encode())
+            payload = cache / 'payload'
+            payload.mkdir()
+            if version != '0.9.4':
+                (payload / 'ready.json').write_text('{}')
+                core = ('OptiScaler.dll', 'OptiScaler.ini',
+                        'OptiScaler/libxess.dll' if version.startswith('10.') else 'libxess.dll')
+                for name in core:
+                    if version == '0.7.9' and name == 'libxess.dll':
+                        continue
+                    path = payload / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b'fixture')
+
+        staged_before = tree_snapshot()
+        with patch('opti.urllib.request.urlopen', side_effect=AssertionError('Status must not download')), \
+                patch.object(Path, 'read_bytes', side_effect=AssertionError('Status must not read cached files')):
+            staged = self.manager.opti_cache_status()
+        self.assertEqual(staged, {
+            '0.9.4':dict(cached=True, prepared=False, size_bytes=len(b'archive-0.9.4')),
+            '0.7.9':dict(cached=True, prepared=False, size_bytes=len(b'archive-0.7.9')),
+            '10.0.0-pre1_20261025':dict(cached=True, prepared=True, size_bytes=len(b'archive-10.0.0-pre1_20261025')),
+        })
+        self.assertEqual(tree_snapshot(), staged_before)
+
     def test_unknown_length_does_not_publish_total(self):
         response, _ = self.response(None)
         with patch('opti.urllib.request.urlopen', return_value=response), patch('opti.subprocess.run', side_effect=self.unpack):
@@ -101,6 +174,14 @@ class CacheChecks(unittest.TestCase):
 
 
 class RpcChecks(unittest.IsolatedAsyncioTestCase):
+    async def test_cache_status_is_allowed_during_an_active_operation(self):
+        manager = Manager('/tmp/nonexistent-opti-progress-fixture', types.SimpleNamespace())
+        manager.progress.begin(42, 'opti_install')
+        plugin = Plugin(); plugin.manager = manager; plugin.lock = asyncio.Lock(); plugin.install_active = True
+        expected = {version:dict(cached=False, prepared=False, size_bytes=0) for version in RELEASES}
+        with patch.object(manager, 'opti_cache_status', return_value=expected):
+            self.assertEqual(await plugin.opti_cache_status(), {'ok':True, 'data':expected})
+
     async def test_mutation_rejected_before_worker_progress_begins(self):
         manager = Manager('/tmp/nonexistent-opti-progress-fixture', types.SimpleNamespace())
         plugin = Plugin(); submitted = asyncio.Event(); release = asyncio.Event()

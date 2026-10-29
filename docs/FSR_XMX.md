@@ -1,7 +1,9 @@
 # FSR 4.1.2 Lite XMX
 
 Opti2XMX 0.3.0 adds FSR 4.1.2 Lite XMX to the existing **Upscaling output**
-selector. XeSS remains the default. Exit the game before saving either choice.
+selector. XeSS remains the default. Exit the game before changing either choice.
+Selections save automatically; a running game is refused without retaining a
+pending selection or retrying it later. Choose FSR again after exiting.
 
 Import the original `FSR-4.1.2-Lite-XMX-OptiClick-0.6.zip` with the local file
 picker. The plugin accepts only the exact archive described in `fsr-source.json`.
@@ -14,6 +16,19 @@ then enables XMX before applying FSR. The action preserves the existing Opti
 rollback journal and confirms each Steam launch-option change. Selecting XeSS
 uses the same managed installation. Disabling XMX restores a XeSS-safe INI;
 an undo from the previous FSR session cannot enable FSR on the stock driver.
+
+Opti installation uses one shared cache for all games. If Boiler has already
+provided the matching original archive, **Install from local package** is the
+default source. Otherwise the first explicit installation downloads the archive
+and retains it for later reuse. Selecting a local source never falls back to a
+network download. Choosing an executable and an installation target does not
+start installation; use the installation action after confirming the executable.
+
+Installing Opti while XMX is enabled temporarily restores the original setup,
+confirms the installation, then enables XMX through the new Opti route. An
+interrupted operation retains its actual state and recovery action. Version
+installation resets upscaling and frame generation; choose FSR afterward to
+apply it again.
 
 The public package contains the `fsrxdec` decompression adapter and the LGPL
 Windows build of wimlib, with their licenses and corresponding source. Import

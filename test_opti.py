@@ -1,8 +1,10 @@
 from pathlib import Path
 from unittest.mock import patch
+import asyncio
 import copy
 import unittest
 from test_manager import Tests
+from main import Plugin
 
 
 class Lifecycle(Tests):
@@ -365,6 +367,35 @@ class Lifecycle(Tests):
         with self.assertRaisesRegex(RuntimeError,'普通文件'):self.m.opti_restore_settings(42)
         with self.assertRaisesRegex(RuntimeError,'普通文件'):self.m.opti_settings(42,self.fg_settings())
         self.assertEqual(external.read_bytes(),saved)
+
+    def test_settings_preflight_is_read_only_and_checks_managed_game(self):
+        self.fresh();self.install_opti()
+        before={str(p.relative_to(self.home)):(p.read_bytes(),p.stat().st_mtime_ns)
+                for p in self.home.rglob('*') if p.is_file()}
+        with patch.object(self.m.runtime(),'game_idle') as game_idle:
+            self.assertTrue(self.m.settings_preflight(42))
+        game_idle.assert_called_once_with(self.prefix,'game.exe')
+        after={str(p.relative_to(self.home)):(p.read_bytes(),p.stat().st_mtime_ns)
+               for p in self.home.rglob('*') if p.is_file()}
+        self.assertEqual(after,before)
+
+    def test_settings_preflight_refuses_running_game_without_writes(self):
+        self.fresh();self.install_opti()
+        before={str(p.relative_to(self.home)):(p.read_bytes(),p.stat().st_mtime_ns)
+                for p in self.home.rglob('*') if p.is_file()}
+        with patch.object(self.m.runtime(),'game_idle',side_effect=RuntimeError('Game is running')):
+            with self.assertRaisesRegex(RuntimeError,'Game is running'):
+                self.m.settings_preflight(42)
+        after={str(p.relative_to(self.home)):(p.read_bytes(),p.stat().st_mtime_ns)
+               for p in self.home.rglob('*') if p.is_file()}
+        self.assertEqual(after,before)
+
+    def test_settings_preflight_rpc_translates_running_refusal(self):
+        self.fresh();self.install_opti()
+        plugin=Plugin();plugin.manager=self.m;plugin.lock=asyncio.Lock();plugin.install_active=False
+        with patch.object(self.m.runtime(),'game_idle',side_effect=RuntimeError('Prefix is in use')):
+            result=asyncio.run(plugin.settings_preflight(42))
+        self.assertEqual(result,{'ok':False,'error':'游戏正在运行，请先退出游戏再更改设置。'})
 
     def test_pending_lifecycle_and_xmx_operations_block_settings(self):
         self.fresh();p=self.m.opti_install(42,'game.exe','','0.9.4','github')
