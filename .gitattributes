@@ -1,3 +1,5 @@
 * text=auto eol=lf
 *.png binary
 *.zip binary
+fsr_compat/** -text whitespace=cr-at-eol
+fsr_compat/licenses/** whitespace=cr-at-eol,-blank-at-eof
