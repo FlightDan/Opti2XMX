@@ -4,7 +4,7 @@
 
 **在 SteamOS 上按游戏管理 OptiScaler 和 Intel XeSS XMX 的 Decky 插件。**
 
-版本 **0.3.1** · AGPL-3.0-only 许可证
+版本 **0.3.2-dev.1** · AGPL-3.0-only 许可证
 
 本次发布新增实验性 XeSS FG 2x/3x/4x 请求、独立设置撤销，以及防止 Proton 覆盖的 XMX shim 路径。已在一台 Intel 掌机完成赛博朋克 2077 短时基准与回滚测试，FG 控件继续保留实验性标记。见[帧生成测试与恢复说明](docs/FRAME_GENERATION.md)。
 

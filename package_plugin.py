@@ -9,7 +9,7 @@ output = base / f'opti2xmx-{version}.zip'
 files = ['plugin.json', 'package.json', 'main.py', 'manager.py', 'opti.py', 'download_progress.py', 'runtime_setup.py', 'runtime-source.json',
          'per_game.py', 'dist/index.js', 'README.md', 'README.zh-CN.md',
          'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/RUNTIME.md', 'docs/FRAME_GENERATION.md']
-files += ['fsr.py', 'fsr_cm.py', 'fsr-source.json', 'docs/FSR_XMX.md', 'fsr_compat/manifest.json']
+files += ['fsr.py', 'fsr_cm.py', 'fsr-source.json', 'opti-archive-files.json', 'docs/FSR_XMX.md', 'fsr_compat/manifest.json']
 compat = json.loads((base / 'fsr_compat/manifest.json').read_text(encoding='utf-8'))
 import hashlib
 for row in compat['files'] + compat['distribution_files']:

@@ -148,8 +148,8 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
         self.runtime().atomic_text(Path(record['state']) / 'plugin.json', json.dumps(record, ensure_ascii=False, indent=2) + '\n')
 
     def dependencies(self):
-        # An installer may stage these portable locations. Development machine
-        # discovery is read-only and never makes it into a public binary bundle.
+        # Runtime provisioning and explicit runtime.json paths are authoritative.
+        # Never discover development-only inputs outside this project's data.
         config = self.root / 'runtime.json'
         if config.exists():
             try:
@@ -162,10 +162,6 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
         else:
             package = self.home / '.local/share/opti2xmx/runtime'
             sr = self.home / '.local/share/opti2xmx/sdk/libxess.dll'
-            if not package.is_dir():
-                package = self.home / 'oxp3-research/xess/xess-xmx-linux-20261005'
-            if not sr.is_file():
-                sr = self.home / 'oxp3-research/xess-sr/payload/libxess.dll'
         ready = all((package / name).is_file() for name in ('igdext64.dll', 'lib/libvulkan_intel.so',
                     'tools/cm-compile.sh', 'tools/cmk_pack.py')) and sr.is_file() and (pe_version(sr) or ()) >= (2, 0, 2, 68)
         ready = ready and all(any(p.is_file() for p in package.glob(pattern)) for pattern in
