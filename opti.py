@@ -9,6 +9,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import time
 import urllib.request
 import uuid
@@ -19,6 +20,28 @@ RELEASES = {
     '0.7.9': ('v0.7.9', 'OptiScaler_0.7.9.7z', 286094187),
     '10.0.0-pre1_20261025': ('nightly-20261025', 'OptiScaler_v10.0.0-pre1_20261025.7z', 674569124),
 }
+ARCHIVE_PINS = {
+    '0.9.4': dict(size_bytes=55016448, sha256='575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad'),
+    '0.7.9': dict(size_bytes=32581791, sha256='70103bf3746140d368179773edeafb02ec9718efa130276b8da833c3156fbfe3'),
+}
+
+
+def archive_pin(version):
+    if version.startswith('10.'):
+        from fsr import descriptor
+        return descriptor()['opti_archive']
+    return ARCHIVE_PINS[version]
+
+
+def validate_archive(path, version, pin):
+    checksum = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            checksum.update(chunk)
+    if path.stat().st_size != pin['size_bytes'] or checksum.hexdigest() != pin['sha256']:
+        label = '10' if version.startswith('10.') else version
+        raise RuntimeError('Opti ' + label + ' 安装包与已验证版本的 SHA-256 不匹配。请移除损坏的缓存后重试。')
+
 ASSETS = ['OptiScaler.dll', 'OptiScaler.ini', 'libxess.dll', 'libxess_dx11.dll',
           'libxess_fg.dll', 'libxell.dll', 'amd_fidelityfx_dx12.dll',
           'amd_fidelityfx_framegeneration_dx12.dll', 'amd_fidelityfx_upscaler_dx12.dll',
@@ -33,6 +56,44 @@ V10_ASSETS = ['OptiScaler.dll', 'OptiScaler.ini',
               'OptiScaler/amd_fidelityfx_framegeneration_dx12.dll', 'OptiScaler/amd_fidelityfx_vk.dll',
               'OptiScaler/dlssg_to_fsr3_amd_is_better.dll', 'OptiScaler/D3D12_OptiScaler/D3D12Core.dll',
               'Licenses/DirectX_LICENSE.txt', 'Licenses/FidelityFX_v2_LICENSE.md', 'Licenses/XeSS_LICENSE.txt']
+
+
+def archive_files(version, pin):
+    """Bundled file hashes are derived only from the pinned upstream archive."""
+    descriptor = json.loads(Path(__file__).with_name('opti-archive-files.json').read_text(encoding='utf-8'))
+    release = descriptor['releases'][version]
+    files = release['files']
+    allowed = V10_ASSETS if version.startswith('10.') else ASSETS
+    required = {'OptiScaler.dll', 'OptiScaler.ini',
+                'OptiScaler/libxess.dll' if version.startswith('10.') else 'libxess.dll'}
+    if (descriptor.get('schema') != 1 or release.get('archive_sha256') != pin['sha256']
+            or not required.issubset(files) or not set(files).issubset(allowed)
+            or any(type(row.get('size_bytes')) is not int or not 0 < row['size_bytes'] <= 100 * 1024 * 1024
+                   or not re.fullmatch(r'[a-f0-9]{64}', row.get('sha256', '')) for row in files.values())):
+        raise RuntimeError('Opti 安装包文件校验清单无效，请重新安装插件。')
+    return files
+
+
+def file_matches(path, pin):
+    if not path.is_file() or path.stat().st_size != pin['size_bytes']:
+        return False
+    checksum = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            checksum.update(chunk)
+    return checksum.hexdigest() == pin['sha256']
+
+
+def atomic_cache_bytes(path, data):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.opti-', dir=path.parent, delete=False) as output:
+            temporary = Path(output.name)
+            output.write(data)
+        temporary.replace(path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def ini_values(path):
@@ -169,12 +230,12 @@ class OptiMixin:
         cache = self.root / 'downloads' / tag
         archive = cache / filename
         self.runtime().no_symlink_parents(archive)
+        if archive.is_symlink():
+            raise RuntimeError('安装包缓存不能是符号链接')
         if source == 'local' and (not archive.is_file() or archive.is_symlink()):
             raise RuntimeError('所选 Opti 版本未找到本地缓存包，请选择在线下载源或选择其他版本。')
         nightly = version.startswith('10.')
-        if nightly:
-            from fsr import descriptor
-            pin = descriptor()['opti_archive']
+        pin = archive_pin(version)
         repository = 'optiscaler/OptiScaler-nightly' if nightly else 'optiscaler/OptiScaler'
         cache.mkdir(parents=True, exist_ok=True)
         if not archive.exists():
@@ -185,53 +246,69 @@ class OptiMixin:
             elif source == 'ghfast':url='https://ghfast.top/'+url
             elif source == 'ghproxy':url='https://gh-proxy.com/'+url
             req = urllib.request.Request(url, headers={'User-Agent':'Opti2XMX', 'Accept':'application/octet-stream'})
-            part = archive.with_suffix('.part')
+            part = None
             try:
-                with urllib.request.urlopen(req, timeout=45, context=download_ssl_context()) as response, part.open('wb') as out:
-                    header = response.headers.get('Content-Length', '')
-                    total_bytes = int(header) if str(header).isdigit() and len(str(header)) < 12 else None
-                    total = 0
-                    self.progress.update(operation_id, 'downloading', 0, total_bytes)
-                    while True:
-                        chunk = response.read(1024 * 1024)
-                        if not chunk: break
-                        total += len(chunk)
-                        if total > 200 * 1024 * 1024: raise RuntimeError('下载文件超过限制')
-                        out.write(chunk)
-                        self.progress.update(operation_id, 'downloading', total, total_bytes)
+                with tempfile.NamedTemporaryFile(prefix='.' + filename + '-', suffix='.part', dir=cache, delete=False) as out:
+                    part = Path(out.name)
+                    with urllib.request.urlopen(req, timeout=45, context=download_ssl_context()) as response:
+                        header = response.headers.get('Content-Length', '')
+                        total_bytes = int(header) if str(header).isdigit() and len(str(header)) < 12 else None
+                        total = 0
+                        self.progress.update(operation_id, 'downloading', 0, total_bytes)
+                        while True:
+                            chunk = response.read(1024 * 1024)
+                            if not chunk: break
+                            total += len(chunk)
+                            if total > pin['size_bytes']: raise RuntimeError('下载文件超过固定版本大小限制')
+                            out.write(chunk)
+                            self.progress.update(operation_id, 'downloading', total, total_bytes)
                 with part.open('rb') as f:
                     if f.read(6) != b'7z\xbc\xaf\x27\x1c': raise RuntimeError('下载源没有返回 7z 安装包，请切换下载源')
+                validate_archive(part, version, pin)
                 part.replace(archive)
             finally:
-                if part.exists(): part.unlink()
+                if part is not None and part.exists(): part.unlink()
         else:
             self.progress.update(operation_id, 'cache-hit', archive.stat().st_size, archive.stat().st_size)
-        if nightly:
-            from fsr import digest
-            if archive.stat().st_size != pin['size_bytes'] or digest(archive) != pin['sha256']:
-                raise RuntimeError('Opti 10 安装包与已验证版本的 SHA-256 不匹配。')
+            validate_archive(archive, version, pin)
+        files = archive_files(version, pin)
         # Extract only fixed names via stdout: archive paths/symlinks cannot escape.
         payload = cache / 'payload'
+        self.runtime().no_symlink_parents(payload / 'ready.json')
+        if (payload / 'ready.json').is_symlink():
+            raise RuntimeError('缓存记录不能是符号链接')
         payload.mkdir(exist_ok=True)
-        required = ('OptiScaler.dll', 'OptiScaler.ini', 'OptiScaler/libxess.dll' if nightly else 'libxess.dll')
-        if (payload/'ready.json').exists() and all((payload/n).is_file() and not (payload/n).is_symlink()
-                                                   for n in required):
+        names = V10_ASSETS if nightly else ASSETS
+        for name in names:
+            path = payload / name
+            self.runtime().no_symlink_parents(path)
+            if path.is_symlink() or (path.exists() and not path.is_file()):
+                raise RuntimeError('缓存文件必须是普通文件：' + name)
+        # ready.json is a progress receipt, never a trust root. Check every
+        # allowlisted payload against bundled hashes before a warm-cache reuse.
+        if all(file_matches(payload/name, files[name]) if name in files else not (payload/name).exists()
+               for name in names):
             return payload
-        for name in (V10_ASSETS if nightly else ASSETS):
+        for name in names:
             self.progress.update(operation_id, 'extracting')
             p = payload / name
             self.runtime().no_symlink_parents(p)
             if p.is_symlink():raise RuntimeError('缓存文件不能是符号链接')
+            if name not in files:
+                # Remove only a known optional cache member absent from this
+                # exact upstream release; unrelated cache files are preserved.
+                if p.exists(): p.unlink()
+                continue
             result = subprocess.run(['7z','e','-so',str(archive),name], env=system_env(), capture_output=True, timeout=90)
             if result.returncode or not result.stdout:
-                if name in required:
-                    raise RuntimeError('安装包缺少必需文件：' + name)
-                continue
-            if len(result.stdout) > 100 * 1024 * 1024: raise RuntimeError('安装包文件过大')
+                raise RuntimeError('安装包缺少已验证文件：' + name)
+            if (len(result.stdout) != files[name]['size_bytes']
+                    or hashlib.sha256(result.stdout).hexdigest() != files[name]['sha256']):
+                raise RuntimeError('安装包解压文件校验失败：' + name)
             if name.endswith('.dll') and not result.stdout.startswith(b'MZ'):
                 raise RuntimeError('安装包 DLL 格式无效：' + name)
-            p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(result.stdout)
-        (payload/'ready.json').write_text(json.dumps({'version':version,'source':source}))
+            p.parent.mkdir(parents=True,exist_ok=True);atomic_cache_bytes(p, result.stdout)
+        atomic_cache_bytes(payload/'ready.json', json.dumps({'version':version,'source':source}).encode())
         return payload
 
     def opti_context(self, appid, executable, actual, allow_xmx=False):

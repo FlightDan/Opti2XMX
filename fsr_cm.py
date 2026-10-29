@@ -9,6 +9,7 @@ from pathlib import Path
 import struct
 import subprocess
 import sys
+import tempfile
 
 PRE_HASH = '46fe6c9997eb76ed'
 
@@ -25,10 +26,15 @@ def correct_pre(path):
         raise RuntimeError('FSR PRE compiler metadata differs from the verified profile')
     fixed = bytearray(data)
     struct.pack_into('<3I', fixed, 168, 1, 2, 4)
-    temporary = path.with_name(path.name + '.fsr-fixed')
-    with temporary.open('xb') as output:
-        output.write(fixed)
-    temporary.replace(path)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.fsr-fixed-', dir=path.parent, delete=False) as output:
+            temporary = Path(output.name)
+            output.write(fixed)
+        temporary.replace(path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
     record = {'profile': 1, 'kernel': PRE_HASH, 'heap_set': 1, 'binding': 2, 'table_pc_base': 4,
               'before_sha256': hashlib.sha256(data).hexdigest(),
               'after_sha256': hashlib.sha256(fixed).hexdigest()}

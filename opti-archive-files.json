@@ -1,0 +1,196 @@
+{
+  "schema": 1,
+  "releases": {
+    "0.9.4": {
+      "archive_sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
+      "files": {
+        "OptiScaler.dll": {
+          "size_bytes": 25379632,
+          "sha256": "fbfb6676b829dad7e020fb830586a16aa0ec6add78016db48ef12e2ae1803231"
+        },
+        "OptiScaler.ini": {
+          "size_bytes": 47477,
+          "sha256": "6d7ed07e2e9df3d611b6f59047716bcbc0b67834296b8e4414816189b1233aa7"
+        },
+        "libxess.dll": {
+          "size_bytes": 77795704,
+          "sha256": "251659dd84a3e84de67c886a4186e01f3eca49b00641906fe38bb6b807e5d5b7"
+        },
+        "libxess_dx11.dll": {
+          "size_bytes": 156016,
+          "sha256": "c7cfe86f0c9d94e4fb3696d3cd5035e2bbb6a8b1b0572f8b7395a4cdfd0c625e"
+        },
+        "libxess_fg.dll": {
+          "size_bytes": 22957432,
+          "sha256": "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27"
+        },
+        "libxell.dll": {
+          "size_bytes": 411504,
+          "sha256": "61aeeab7fdcfb6d1742f86c14c68c663d759607d01a6132645c857291eaebb86"
+        },
+        "amd_fidelityfx_dx12.dll": {
+          "size_bytes": 26376,
+          "sha256": "e2d85aa05a9bd9ed8b38935fdf5199372cca6f74c12015143bb6f945ee1608aa"
+        },
+        "amd_fidelityfx_framegeneration_dx12.dll": {
+          "size_bytes": 40085776,
+          "sha256": "02297beedd285e822d3a64f314cf00faf378dcec0edc47ff0c4dd71b3a8c2f18"
+        },
+        "amd_fidelityfx_upscaler_dx12.dll": {
+          "size_bytes": 28761864,
+          "sha256": "d0dcccc74a43c44ba435b7a369b456e0970d8a4464e4bd683119b374f2c9fb46"
+        },
+        "amd_fidelityfx_vk.dll": {
+          "size_bytes": 9332432,
+          "sha256": "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78"
+        },
+        "fakenvapi.dll": {
+          "size_bytes": 415232,
+          "sha256": "373e73dc06e2d66e90083fde3bc99ef5c1ed0bef98d1f7eda56c8b073269c3f1"
+        },
+        "fakenvapi.ini": {
+          "size_bytes": 466,
+          "sha256": "a4bfa3ec7b4badd93ae5e1ad74a582238082d871f54f38f68e7d9fb6384ce772"
+        },
+        "dlssg_to_fsr3_amd_is_better.dll": {
+          "size_bytes": 3038208,
+          "sha256": "806020c0444f7841a3a9f661295c16fc482e981e0666d0b9624bf6ccd19c4b5e"
+        },
+        "D3D12_Optiscaler/D3D12Core.dll": {
+          "size_bytes": 3351064,
+          "sha256": "07d286c306f8117321422affd9e6388c12d0fb4be1c7fc689d9e899324feeb24"
+        },
+        "Licenses/DirectX_LICENSE.txt": {
+          "size_bytes": 13147,
+          "sha256": "5239850894610071566f7ecee0b751fde43c862032d92b99d7d0f596b3433ebd"
+        },
+        "Licenses/FidelityFX_v1_LICENSE.md": {
+          "size_bytes": 1142,
+          "sha256": "a335c2bb2bd28184b9a30b6e35b0c7e4aa7826abd1c388fc2aa02405e9d04f03"
+        },
+        "Licenses/FidelityFX_v2_LICENSE.md": {
+          "size_bytes": 61784,
+          "sha256": "f0da09d71ad5c82759a179e774535d4a829e5c96c49294167c1152402b2cb400"
+        },
+        "Licenses/XeSS_LICENSE.txt": {
+          "size_bytes": 4194,
+          "sha256": "784be42c39a4a4d03cf85d88e15e59d75828fca773ce45b8dbfffbd7eaf208df"
+        }
+      }
+    },
+    "0.7.9": {
+      "archive_sha256": "70103bf3746140d368179773edeafb02ec9718efa130276b8da833c3156fbfe3",
+      "files": {
+        "OptiScaler.dll": {
+          "size_bytes": 23888384,
+          "sha256": "1430008041fd5e1d1d3ef661fdc9e5ae2c4126ac039f09ad7f5586edd9d3d541"
+        },
+        "OptiScaler.ini": {
+          "size_bytes": 31449,
+          "sha256": "da5df0dfb8fc07f981d6a1ff9b7f4ff31fb2018a91d4a2775e420b4288f010b9"
+        },
+        "libxess.dll": {
+          "size_bytes": 77788528,
+          "sha256": "a49f487f15a815c1242b659182cc9365b6aff2d94051d25d5379316bdb11a2dd"
+        },
+        "libxess_dx11.dll": {
+          "size_bytes": 156024,
+          "sha256": "249c87dea58aa9d6f6b5309d5acaf6b95e77bb8055735a3f162e3d24af086733"
+        },
+        "amd_fidelityfx_dx12.dll": {
+          "size_bytes": 13312,
+          "sha256": "6bf0d4f89611ff3cf0f15f767eb4c16c7044cba1e83d6272d996add42980b767"
+        },
+        "amd_fidelityfx_framegeneration_dx12.dll": {
+          "size_bytes": 1079296,
+          "sha256": "a6f0021a1c8f3f510d3ebf0289be00a3703d9d006dc5699614ff87c34f737297"
+        },
+        "amd_fidelityfx_upscaler_dx12.dll": {
+          "size_bytes": 13126656,
+          "sha256": "8a976a2efce7738487a581bec5aa214eac9cabe9b4bc35ba54e6f1e76d1839b4"
+        },
+        "amd_fidelityfx_vk.dll": {
+          "size_bytes": 9332432,
+          "sha256": "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78"
+        },
+        "D3D12_Optiscaler/D3D12Core.dll": {
+          "size_bytes": 3351064,
+          "sha256": "07d286c306f8117321422affd9e6388c12d0fb4be1c7fc689d9e899324feeb24"
+        },
+        "Licenses/DirectX_LICENSE.txt": {
+          "size_bytes": 13147,
+          "sha256": "5239850894610071566f7ecee0b751fde43c862032d92b99d7d0f596b3433ebd"
+        },
+        "Licenses/XeSS_LICENSE.txt": {
+          "size_bytes": 4194,
+          "sha256": "784be42c39a4a4d03cf85d88e15e59d75828fca773ce45b8dbfffbd7eaf208df"
+        }
+      }
+    },
+    "10.0.0-pre1_20261025": {
+      "archive_sha256": "6bb2e9cd6ac0204c76c974df1c202afb1fc7a765844a9ccf608103557aa595fe",
+      "files": {
+        "OptiScaler.dll": {
+          "size_bytes": 26620416,
+          "sha256": "8f0a08109aac4d753b58fe788521993d53cbfdc8f1bee0e0ffbb8d38dbe56cae"
+        },
+        "OptiScaler.ini": {
+          "size_bytes": 59920,
+          "sha256": "4d128000b1a9b48d5bc648dadef6cd3b01a6e75cf845f08835c13537fc6f8df2"
+        },
+        "OptiScaler/libxess.dll": {
+          "size_bytes": 77795704,
+          "sha256": "251659dd84a3e84de67c886a4186e01f3eca49b00641906fe38bb6b807e5d5b7"
+        },
+        "OptiScaler/libxess_dx11.dll": {
+          "size_bytes": 156016,
+          "sha256": "c7cfe86f0c9d94e4fb3696d3cd5035e2bbb6a8b1b0572f8b7395a4cdfd0c625e"
+        },
+        "OptiScaler/libxess_fg.dll": {
+          "size_bytes": 22957432,
+          "sha256": "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27"
+        },
+        "OptiScaler/libxell.dll": {
+          "size_bytes": 415368,
+          "sha256": "d2030dcd694fda8f2ec7e044b13e6db8f0b56d4ba9113a5efad334e3f3ded8c7"
+        },
+        "OptiScaler/amd_fidelityfx_loader_dx12.dll": {
+          "size_bytes": 26376,
+          "sha256": "e2d85aa05a9bd9ed8b38935fdf5199372cca6f74c12015143bb6f945ee1608aa"
+        },
+        "OptiScaler/amd_fidelityfx_upscaler_dx12.dll": {
+          "size_bytes": 28761864,
+          "sha256": "d0dcccc74a43c44ba435b7a369b456e0970d8a4464e4bd683119b374f2c9fb46"
+        },
+        "OptiScaler/amd_fidelityfx_framegeneration_dx12.dll": {
+          "size_bytes": 40085776,
+          "sha256": "02297beedd285e822d3a64f314cf00faf378dcec0edc47ff0c4dd71b3a8c2f18"
+        },
+        "OptiScaler/amd_fidelityfx_vk.dll": {
+          "size_bytes": 9332432,
+          "sha256": "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78"
+        },
+        "OptiScaler/dlssg_to_fsr3_amd_is_better.dll": {
+          "size_bytes": 3041792,
+          "sha256": "14e83096f4e7648b89a724208c6219508b44563ce8c44967c60a5fa46a9221e2"
+        },
+        "OptiScaler/D3D12_OptiScaler/D3D12Core.dll": {
+          "size_bytes": 3351064,
+          "sha256": "07d286c306f8117321422affd9e6388c12d0fb4be1c7fc689d9e899324feeb24"
+        },
+        "Licenses/DirectX_LICENSE.txt": {
+          "size_bytes": 13147,
+          "sha256": "5239850894610071566f7ecee0b751fde43c862032d92b99d7d0f596b3433ebd"
+        },
+        "Licenses/FidelityFX_v2_LICENSE.md": {
+          "size_bytes": 61784,
+          "sha256": "f0da09d71ad5c82759a179e774535d4a829e5c96c49294167c1152402b2cb400"
+        },
+        "Licenses/XeSS_LICENSE.txt": {
+          "size_bytes": 4194,
+          "sha256": "784be42c39a4a4d03cf85d88e15e59d75828fca773ce45b8dbfffbd7eaf208df"
+        }
+      }
+    }
+  }
+}

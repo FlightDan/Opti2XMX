@@ -1,5 +1,6 @@
 """Temporary cache and RPC concurrency checks; never access real games."""
 import asyncio
+import hashlib
 import io
 from pathlib import Path
 import tempfile
@@ -10,7 +11,7 @@ from unittest.mock import patch
 from download_progress import OperationProgress, LIMIT
 from manager import Manager
 from main import Plugin
-from opti import RELEASES
+from opti import RELEASES, ASSETS
 
 
 class StateChecks(unittest.TestCase):
@@ -52,9 +53,18 @@ class CacheChecks(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(); self.addCleanup(self.directory.cleanup)
         self.manager = Manager(self.directory.name, types.SimpleNamespace(no_symlink_parents=lambda path: None))
+        # Pin the trusted synthetic archive, retaining the production validation path.
+        self.fixture = b'7z\xbc\xaf\x27\x1c' + b'x' * (2*1024*1024)
+        pin = dict(size_bytes=len(self.fixture), sha256=hashlib.sha256(self.fixture).hexdigest())
+        self.pin_patch = patch('opti.archive_pin', return_value=pin)
+        self.pin_patch.start(); self.addCleanup(self.pin_patch.stop)
+        self.files = {name: self.unpack([name]).stdout for name in ASSETS}
+        self.files_patch = patch('opti.archive_files', return_value={name:dict(
+            size_bytes=len(data),sha256=hashlib.sha256(data).hexdigest()) for name,data in self.files.items()})
+        self.files_patch.start(); self.addCleanup(self.files_patch.stop)
 
     def response(self, total):
-        data = b'7z\xbc\xaf\x27\x1c' + b'x' * (2*1024*1024)
+        data = self.fixture
         response = io.BytesIO(data); response.headers = {} if total is None else {'Content-Length': total}
         return response, data
 
@@ -91,11 +101,12 @@ class CacheChecks(unittest.TestCase):
         cache = self.manager.root / 'downloads' / tag
         cache.mkdir(parents=True)
         archive = cache / filename
-        archive.write_bytes(b'7z\xbc\xaf\x27\x1c cached fixture')
+        archive.write_bytes(self.fixture)
         payload = cache / 'payload'; payload.mkdir()
         (payload / 'ready.json').write_text('{}')
-        for name in ('OptiScaler.dll', 'OptiScaler.ini', 'libxess.dll'):
-            (payload / name).write_bytes(b'MZ fixture' if name.endswith('.dll') else b'[Upscalers]\n')
+        for name, data in self.files.items():
+            path = payload / name; path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
         with patch('opti.urllib.request.urlopen', side_effect=AssertionError('Local source contacted network')), \
                 patch('opti.subprocess.run', side_effect=AssertionError('Prepared cache was extracted again')):
             self.assertEqual(self.manager.opti_package('0.9.4', 'local'), payload)

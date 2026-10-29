@@ -4,7 +4,7 @@
 
 **A Decky plugin for per-game OptiScaler management and Intel XeSS XMX setup on SteamOS.**
 
-Version **0.3.1** · AGPL-3.0-only license
+Version **0.3.2-dev.1** · AGPL-3.0-only license
 
 This release adds experimental XeSS FG 2x/3x/4x requests, independent settings undo, and a Proton-safe XMX shim path. Short Cyberpunk 2077 benchmarks and rollback were tested on one Intel handheld; the FG controls retain their experimental label. See [FG testing and recovery](docs/FRAME_GENERATION.md).
 

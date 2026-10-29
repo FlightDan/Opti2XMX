@@ -6,6 +6,17 @@ export function language(): 'zh' | 'en' {
 }
 
 const english: Record<string, string> = {
+  'Opti 0.9.4 安装包与已验证版本的 SHA-256 不匹配。请移除损坏的缓存后重试。': 'The Opti 0.9.4 package SHA-256 does not match the verified release. Remove the corrupt archive cache and retry.',
+  'Opti 0.7.9 安装包与已验证版本的 SHA-256 不匹配。请移除损坏的缓存后重试。': 'The Opti 0.7.9 package SHA-256 does not match the verified release. Remove the corrupt archive cache and retry.',
+  'Opti 10 安装包与已验证版本的 SHA-256 不匹配。请移除损坏的缓存后重试。': 'The Opti 10 package SHA-256 does not match the verified release. Remove the corrupt archive cache and retry.',
+  '下载文件超过固定版本大小限制': 'The download exceeds the pinned release size.',
+  '安装包缓存不能是符号链接': 'The package cache must not be a symbolic link.',
+  '缓存记录不能是符号链接': 'The cache receipt must not be a symbolic link.',
+  '缓存文件不能是符号链接': 'Cached files must not be symbolic links.',
+  '缓存文件必须是普通文件：': 'Cached files must be regular files: ',
+  'Opti 安装包文件校验清单无效，请重新安装插件。': 'The bundled Opti file verification list is invalid. Reinstall the plugin.',
+  '安装包缺少已验证文件：': 'The package is missing a verified file: ',
+  '安装包解压文件校验失败：': 'An extracted package file failed verification: ',
   '所选 Opti 版本未找到本地缓存包，请选择在线下载源或选择其他版本。': 'No local package was found for this Opti version. Choose an online source or another version.',
   '本地安装包不存在，请重新选择安装来源。': 'The local package is missing. Choose an installation source again.',
   '撤销未完成的 Opti 操作，保留原文件和回退记录。': 'Undo the unfinished Opti operation, retaining original files and rollback records.',
