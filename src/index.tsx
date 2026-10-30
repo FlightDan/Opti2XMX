@@ -1,5 +1,5 @@
 import { t } from './i18n';
-import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, ToggleField, staticClasses, Navigation, Router } from '@decky/ui';
+import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, SliderField, ToggleField, staticClasses, Navigation, Router } from '@decky/ui';
 import { callable, definePlugin, FileSelectionType, openFilePicker, toaster } from '@decky/api';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
@@ -24,12 +24,12 @@ type DownloadSource = 'local' | 'github' | 'ghfast' | 'ghproxy';
 type SettingsSave = { appid: number; saving: boolean; error: boolean; message: string };
 type CacheStatus = Record<string, {cached:boolean;prepared:boolean;size_bytes:number}>;
 type Selection = { appid: number; executables: Record<number, string>; sources: Record<string, DownloadSource>;
-  versions: Record<number, string>;
+  versions: Record<number, string>; advanced: Record<number, boolean>; fgDraft: {appid:number; value:number} | null;
   cache: CacheStatus;
   snapshots: Record<number, { info: Info; launch: string }>; settingsSave: SettingsSave | null;
   settingsEpochs: Record<number, number>; actionBusy: boolean;
   manualGame: { appid: number; runningAppid: number } | null };
-let selection: Selection = { appid: 0, executables: {}, sources: {}, versions: {}, cache: {}, snapshots: {}, settingsSave: null,
+let selection: Selection = { appid: 0, executables: {}, sources: {}, versions: {}, advanced: {}, fgDraft: null, cache: {}, snapshots: {}, settingsSave: null,
   settingsEpochs: {}, actionBusy: false, manualGame: null };
 const selectionListeners = new Set<() => void>();
 const selectionSnapshot = () => selection;
@@ -40,6 +40,32 @@ function subscribeSelection(listener: () => void) {
 function updateSelection(next: Selection) {
   selection = next;
   for (const listener of selectionListeners) listener();
+}
+let fgTimer: ReturnType<typeof setTimeout> | undefined;
+function cancelMultiplier() {
+  if (fgTimer !== undefined) clearTimeout(fgTimer);
+  fgTimer=undefined;
+  if (selection.fgDraft) updateSelection({...selection,fgDraft:null});
+}
+function scheduleMultiplier(id: number, value: number) {
+  if (selection.appid !== id || selection.actionBusy || selection.settingsSave?.saving || !Number.isInteger(value) || value < 0 || value > 3) return;
+  if (fgTimer !== undefined) clearTimeout(fgTimer);
+  updateSelection({...selection,fgDraft:{appid:id,value}});
+  const flush = () => {
+    fgTimer=undefined;
+    const draft=selection.fgDraft;
+    if (!draft || draft.appid!==id || draft.value!==value) return;
+    if (selection.appid!==id) { updateSelection({...selection,fgDraft:null}); return; }
+    if (selection.actionBusy || selection.settingsSave?.saving) {
+      fgTimer=setTimeout(flush,100);
+      return;
+    }
+    void (async()=>{
+      await saveSettingsPatch(id,{fg:value===0?'native':'xefg',fg_multiplier:['native','2','3','4'][value]},false,true);
+      if (selection.fgDraft===draft) updateSelection({...selection,fgDraft:null});
+    })();
+  };
+  fgTimer=setTimeout(flush,350);
 }
 function runningAppid(): number {
   try {
@@ -184,16 +210,19 @@ function validPatch(patch: Partial<Settings>) {
 }
 // The native Steam menu can call this after Content has unmounted. The shared
 // lock and result belong to the plugin session, not to that old React instance.
-async function saveSettingsPatch(id: number, patch: Partial<Settings>, reset = false) {
+async function saveSettingsPatch(id: number, patch: Partial<Settings>, reset = false, fromSlider = false) {
   if (selection.appid !== id || selection.actionBusy || selection.settingsSave?.saving || !validPatch(patch)) return;
+  if (!fromSlider) cancelMultiplier();
   const manual = selection.executables[id] || '';
   updateSelection({...selection, settingsEpochs:{...selection.settingsEpochs,[id]:(selection.settingsEpochs[id] || 0)+1},
     settingsSave:{appid:id,saving:true,error:false,message:'正在自动保存设置…'}});
   let failure = '';
+  let beforeSettings: Settings | undefined;
   try {
     unwrap(await settingsPreflight(id));
     const current = unwrap(await inspect(id));
     if (!current.opti?.managed) throw new Error(t('请先安装或迁移 Opti'));
+    beforeSettings = current.opti.settings;
     const desired: Settings = reset ? {...defaults} : {...current.opti.settings,...patch};
     if (patch.fg === 'native') desired.fg_multiplier = 'native';
     else if (patch.fg && (!desired.fg_multiplier || desired.fg_multiplier === 'native')) desired.fg_multiplier = '2';
@@ -205,7 +234,12 @@ async function saveSettingsPatch(id: number, patch: Partial<Settings>, reset = f
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
   }
-  await finishSessionTask(id, failure, '设置已自动保存，下次启动游戏生效。');
+  await finishSessionTask(id, failure, '');
+  const afterSettings = selection.snapshots[id]?.info.opti?.settings;
+  const settingKey = (value: Settings) => JSON.stringify([value.sr, value.fg, value.fg_input, value.spoof,
+    value.fg === 'native' ? 'native' : value.fg_multiplier || '2']);
+  if (!selection.settingsSave?.error && beforeSettings && afterSettings && settingKey(beforeSettings) !== settingKey(afterSettings))
+    toaster.toast({title:t('设置已保存'),body:t('请重启游戏以应用更改。')});
 }
 async function finishSessionTask(id: number, failure: string, success: string) {
   let refreshed: {info: Info; launch: string} | undefined;
@@ -228,6 +262,7 @@ function selectedExecutable(info: Info) {
 type OptiAction = 'install' | 'migrate' | 'rollback' | 'uninstall' | 'finish';
 async function runOptiAction(id: number, kind: OptiAction, version: string) {
   if (selection.appid !== id || selection.actionBusy || selection.settingsSave?.saving) return;
+  cancelMultiplier();
   const source = downloadSource(version);
   updateSelection({...selection,settingsEpochs:{...selection.settingsEpochs,[id]:(selection.settingsEpochs[id] || 0)+1},
     settingsSave:{appid:id,saving:true,error:false,message:'正在准备 Opti 安装…'}});
@@ -286,7 +321,7 @@ function Content() {
   const [message, setMessage] = useState(t('正在读取游戏列表…'));
   const [error, setError] = useState(false);
   const lock = useRef(false);
-  const [advanced, setAdvanced] = useState(false);
+
   const [removeConfirm, setRemoveConfirm] = useState(false);
   const [operation, setOperation] = useState<Operation | null>(null);
   const [progressDisconnected, setProgressDisconnected] = useState(false);
@@ -307,7 +342,9 @@ function Content() {
   const saveFeedback = session.settingsSave?.appid === appid ? session.settingsSave : null;
   const visibleMessage = saveFeedback?.message || message;
   const visibleError = saveFeedback?.error ?? error;
-  const busy = localBusy || operation?.running === true || session.settingsSave?.saving === true || session.actionBusy;
+  const sliderBusy = localBusy || operation?.running === true || session.settingsSave?.saving === true || session.actionBusy;
+  const busy = sliderBusy || session.fgDraft !== null;
+  const advanced = session.advanced[appid] ?? true;
   function acceptOperation(value: Operation) {
     if (!mounted.current || value.schema !== 1 || !Number.isSafeInteger(value.revision)
       || (latestOperation.current?.instance_id === value.instance_id && value.revision < latestOperation.current.revision)) return false;
@@ -352,6 +389,7 @@ function Content() {
   }
   async function task(progress: string, fn: () => Promise<void>, reattach = false) {
     if (lock.current || (!reattach && (latestOperation.current?.running || selection.settingsSave?.saving || selection.actionBusy))) return;
+    if (!reattach) cancelMultiplier();
     if (!reattach && selection.settingsSave && !selection.settingsSave.saving)
       updateSelection({...selection,settingsSave:null});
     if (!reattach) updateSelection({...selection,actionBusy:true});
@@ -368,6 +406,7 @@ function Content() {
   }
   async function select(id: number, manual = false) {
     if (!games.some(game => game.appid === id)) return;
+    if (selection.appid !== id) cancelMultiplier();
     localStorage.setItem('opti2xmx-selected', String(id));
     if (selection.appid !== id || manual) updateSelection({...selection, appid:id,
       manualGame:manual ? {appid:id,runningAppid:runningAppid()} : selection.manualGame});
@@ -583,13 +622,12 @@ function Content() {
         })}>{t('打开 / 关闭 Opti 覆盖层')}</ButtonItem>}
       {runtimeControl}
       {(opti?.managed || opti?.rollback) && <>
-        <ButtonItem layout="below" disabled={busy} description={[opti.version ? 'Opti '+opti.version : '', runtimeReady].filter(Boolean).join(' · ')} onClick={()=>setAdvanced(!advanced)}>{advanced?t('收起高级设置'):t('高级设置')}</ButtonItem>
+        <ButtonItem layout="below" disabled={busy} description={[opti.version ? 'Opti '+opti.version : '', runtimeReady].filter(Boolean).join(' · ')} onClick={()=>updateSelection({...selection,advanced:{...selection.advanced,[appid]:!advanced}})}>{advanced?t('收起高级设置'):t('高级设置')}</ButtonItem>
         {advanced && <>
           {opti.managed && (opti.version.startsWith('0.9') || opti.version.startsWith('10.')) && <>
             <DropdownItem layout="below" label={t('超分输出')} disabled={busy || configBlocked} selectedOption={selectedSR}
-              description={t('选择后自动保存；请先退出游戏。')}
-              rgOptions={options(active ? [['xess','XeSS'],['fsr_xmx',t('FSR 4.1.2 Lite XMX')]]
-                : [['xess','XeSS'],['fsr_xmx',t('FSR 4.1.2 Lite XMX')],['fsr31','FSR 3.1'],['fsr22','FSR 2.2'],['dlss',t('DLSS（需要支持的显卡）')]])}
+              rgOptions={options(active ? [['xess','XeSS 2.0.2'],['fsr_xmx',t('FSR 4.1.2 Lite XMX')]]
+                : [['xess','XeSS 2.0.2'],['fsr_xmx',t('FSR 4.1.2 Lite XMX')],['fsr31','FSR 3.1'],['fsr22','FSR 2.2'],['dlss',t('DLSS（需要支持的显卡）')]])}
               onChange={v=>void saveSettingsPatch(appid,{sr:String(v.data)})} />
             {!fsrReady && <ButtonItem layout="below" disabled={busy || configBlocked} description={t(fsrReason)}
               onClick={()=>void importFSRModel()}>{t('导入 FSR 模型包')}</ButtonItem>}
@@ -605,14 +643,13 @@ function Content() {
             </>}
             <DropdownItem layout="below" label={t('帧生成输出')} disabled={busy || configBlocked} selectedOption={settings.fg}
               description={opti.injection_enabled ? undefined : t('开启 Opti 注入后生效。')}
-              rgOptions={options([['native',t('游戏原生（不接管）')],['fsrfg',t('FSR 帧生成')],['xefg',t('XeSS 帧生成（实验）')]])}
+              rgOptions={options([['native',t('游戏原生（不接管）')],['fsrfg',t('FSR 帧生成')],['xefg',t('XeSS 3 帧生成（实验）')]])}
               onChange={v=>void saveSettingsPatch(appid,{fg:String(v.data)})} />
-            {settings.fg!=='fsrfg' && <DropdownItem layout="below" label={t('插帧倍率')+(settings.fg==='native'?' · '+t('游戏原生控制'):'')}
-              disabled={busy || configBlocked} selectedOption={settings.fg==='native' ? 'native' : settings.fg_multiplier || '2'}
-              description={t('选择后自动保存；请先退出游戏。')}
-              rgOptions={options([['native',t('原生')],['2','2×'],['3','3×'],['4','4×']])}
-              onChange={v=>{const value=String(v.data);if(['native','2','3','4'].includes(value))
-                void saveSettingsPatch(appid,{fg:value==='native'?'native':'xefg',fg_multiplier:value});}} />}
+            {settings.fg!=='fsrfg' && <SliderField label={t('插帧倍率')+((session.fgDraft?.appid===appid ? session.fgDraft.value===0 : settings.fg==='native')?' · '+t('游戏原生控制'):'')}
+              disabled={sliderBusy || configBlocked} value={session.fgDraft?.appid===appid ? session.fgDraft.value : settings.fg==='native' ? 0 : Math.max(1,['native','2','3','4'].indexOf(settings.fg_multiplier || '2'))}
+              min={0} max={3} step={1} validValues="steps" notchCount={4} notchTicksVisible showValue={false}
+              notchLabels={[t('原生'),'2×','3×','4×'].map((label,notchIndex)=>({label,notchIndex}))}
+              onChange={value=>scheduleMultiplier(appid,value)} />}
             {settings.fg!=='native' && <DropdownItem layout="below" label={t('游戏 FG 类型')} disabled={busy || configBlocked} selectedOption={settings.fg_input}
               description={t('选择游戏支持的帧生成类型。')}
               rgOptions={options([['fsrfg30','FSR 3.0 FG'],['fsrfg','FSR 3.1 FG'],['dlssg','DLSS FG'],['upscaler',t('无原生 FG：使用超分输入')]])}
@@ -653,5 +690,7 @@ function Content() {
 }
 export default definePlugin(() => ({
   name: 'Opti2XMX', titleView: <div className={staticClasses.Title}>Opti2XMX</div>,
-  content: <Content />, icon: <span style={{ fontWeight: 700 }}>X</span>, onDismount() {},
+  content: <Content />, icon: <span style={{ fontWeight: 700 }}>X</span>, onDismount() {
+    cancelMultiplier();
+  },
 }));
