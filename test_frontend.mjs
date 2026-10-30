@@ -77,18 +77,16 @@ const context = vm.createContext({
   }},
 });
 const source=fs.readFileSync(new URL('dist/index.js',import.meta.url),'utf8')
-  .replace('export { index as default };','globalThis.testAPI={index,readLaunch,writeLaunch,Content,selectionSnapshot};');
+  .replace('export { index as default };','globalThis.testAPI={index,readLaunch,writeLaunch,Content,selectionSnapshot,updateSelection};');
 vm.runInContext(source,context);
 const api=context.testAPI;
 function render(){cursor=0;return api.Content();}
 function nodes(node){if(!node||typeof node!=='object')return [];if(Array.isArray(node))return node.flatMap(nodes);return [node,...nodes(node.props?.children)];}
 function toggle(){return nodes(render()).find(n=>n.type==='toggle').props;}
 function textOf(node){if(node==null)return '';if(typeof node!=='object')return String(node);if(Array.isArray(node))return node.map(textOf).join('');return node.type==='br'?'\n':textOf(node.props?.children);}
-async function settle(){for(let n=0;n<100;n++){await new Promise(r=>setTimeout(r,20));const session=api.selectionSnapshot();if(!slots[5]&&!session.settingsSave?.saving&&!session.actionBusy)return;}throw new Error('UI stayed busy');}
+async function settle(){for(let n=0;n<100;n++){await new Promise(r=>setTimeout(r,20));const session=api.selectionSnapshot();if(!slots[5]&&!session.settingsSave?.saving&&!session.actionBusy&&!session.fgDraft)return;}throw new Error('UI stayed busy');}
 async function reopenUI(){
-  const expanded=!!button('收起高级设置');
   clearUI();await mountUI();
-  if(expanded)button('高级设置')?.onClick();
 }
 assert.equal(api.index().name,'Opti2XMX');
 render();for(const effect of effects){const cleanup=effect();if(cleanup)cleanups.push(cleanup);}await settle();
@@ -147,7 +145,10 @@ releaseDownload();await settle();
 operation={...operation,running:false,phase:'completed',revision:3};for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
 assert.equal(installCount,1);assert.equal(current,'/opti/launch %command%');assert.ok(button('打开 / 关闭 Opti 覆盖层'));
 info.runtime_ready=true;info.automatic.reason='';
-button('高级设置').onClick();
+assert.ok(button('收起高级设置'),'advanced settings should be open by default');
+assert.ok(nodes(render()).some(n=>n.type==='slider' && n.props.label.startsWith('插帧倍率')),'FG multiplier must use a slider');
+assert.equal(nodes(render()).find(n=>n.props?.label==='超分输出').props.description,undefined,'upscaling has no always-visible save hint');
+assert.equal(nodes(render()).find(n=>n.type==='slider' && n.props.label.startsWith('插帧倍率')).props.description,undefined,'slider has no always-visible save hint');
 assert.ok(button('卸载 Opti'));assert.ok(button('回退上次操作'));
 const version=nodes(render()).find(n=>n.type==='select'&&n.props.label==='Opti 安装版本');
 assert.equal(version.props.selectedOption,'0.9.4');
@@ -187,8 +188,8 @@ assert.equal(textOf(toggle().description),'仅限 Intel；更改前请退出游�
 assert.equal(textOf(optiToggle().description),'原生 XeSS 帧生成请关闭。');
 console.log('PASS: Steam language takes precedence; bilingual descriptions, controls and running-game error.');
 // Discrete multiplier choices save the selected value, without drag intermediates.
-const multiplier=()=>nodes(render()).find(n=>n.type==='select'&&n.props.label.startsWith('插帧倍率'))?.props;
-assert.equal(multiplier().selectedOption,'native');
+const multiplier=()=>nodes(render()).find(n=>n.type==='slider'&&n.props.label.startsWith('插帧倍率'))?.props;
+assert.equal(multiplier().value,0);
 let settingsCalls=0,restoreSettingsCalls=0;
 const launchBeforeSettings=current;
 methods.opti_settings=async(id,value,reset)=>{
@@ -202,18 +203,19 @@ methods.opti_restore_settings=async(id)=>{
 };
 assert.equal(button('保存设置'),undefined);
 nodes(render()).find(n=>n.type==='select'&&n.props.label==='帧生成输出').props.onChange({data:'xefg'});await settle();
-assert.equal(multiplier().selectedOption,'2');
-assert.equal(multiplier().rgOptions.map(x=>x.label).join(','),'原生,2×,3×,4×');
-multiplier().onChange({data:'4'});await settle();
-assert.equal(settingsCalls,2);assert.equal(multiplier().selectedOption,'4');assert.ok(button('撤销上次设置'));
-multiplier().onChange({data:'native'});await settle();
-assert.equal(settingsCalls,3);assert.equal(multiplier().selectedOption,'native','native control persists after automatic saving');
+assert.equal(multiplier().value,1);
+assert.equal(multiplier().notchLabels.map(x=>x.label).join(','),'原生,2×,3×,4×');
+multiplier().onChange(3);await settle();
+assert.equal(settingsCalls,2);assert.equal(multiplier().value,3);assert.ok(button('撤销上次设置'));
+assert.equal(notifications.at(-1).body,'请重启游戏以应用更改。');
+multiplier().onChange(0);await settle();
+assert.equal(settingsCalls,3);assert.equal(multiplier().value,0,'native control persists after automatic saving');
 context.document.documentElement.lang='en';
 assert.ok(nodes(render()).some(n=>n.props?.label==='FG multiplier · Game controlled'));
-assert.equal(nodes(render()).find(n=>n.props?.label==='FG multiplier · Game controlled').props.rgOptions[0].label,'Native');
+assert.equal(nodes(render()).find(n=>n.props?.label==='FG multiplier · Game controlled').props.notchLabels[0].label,'Native');
 assert.ok(button('Undo last settings change'));
 context.document.documentElement.lang='zh-cn';
-button('撤销上次设置').onClick();await settle();assert.equal(restoreSettingsCalls,1);assert.equal(multiplier().selectedOption,'native');
+button('撤销上次设置').onClick();await settle();assert.equal(restoreSettingsCalls,1);assert.equal(multiplier().value,0);
 assert.equal(current,launchBeforeSettings);
 info.opti.settings_recovery=true;await reopenUI();
 assert.equal(multiplier().disabled,true);
@@ -226,6 +228,49 @@ assert.equal(button('XMX 运行环境已就绪'),undefined,'ready state is not a
 assert.equal(button('收起高级设置').description,'Opti 0.9.4 · XMX 运行环境已就绪');
 runtime.ready=false;
 console.log('PASS: automatic FG/multiplier saving, four discrete choices, bilingual copy, persistence, independent undo/recovery and unchanged launch options.');
+// Slider drags are coalesced across Steam menu remounts; only the final notch is saved.
+let sliderWrites=[];
+methods.opti_settings=async(id,value)=>{sliderWrites.push(copy(value));info.opti.settings=copy(value);return {ok:true,data:true};};
+let sliderBefore=multiplier();
+sliderBefore.onChange(1);sliderBefore.onChange(2);sliderBefore.onChange(3);
+assert.equal(multiplier().value,3);assert.equal(sliderWrites.length,0);
+clearUI();sliderBefore.onChange(2);sliderBefore.onChange(3);await mountUI();await settle();
+assert.equal(sliderWrites.length,1);assert.equal(sliderWrites[0].fg_multiplier,'4');assert.equal(multiplier().value,3);
+assert.equal(nodes(render()).find(n=>n.props?.label==='超分输出').props.rgOptions[0].label,'XeSS 2.0.2');
+assert.ok(nodes(render()).find(n=>n.props?.label==='帧生成输出').props.rgOptions.some(x=>x.label==='XeSS 3 帧生成（实验）'));
+button('收起高级设置').onClick();await reopenUI();assert.ok(button('高级设置'),'manual collapse survives menu remount');button('高级设置').onClick();
+methods.settings_preflight=async()=>({ok:false,error:'游戏仍在运行，请退出后重试。'});
+const beforeFailureNotifications=notifications.length;
+multiplier().onChange(2);await settle();assert.equal(multiplier().value,3,'failed save restores persisted value');
+assert.ok(nodes(render()).some(n=>n.props?.role==='alert'&&textOf(n).includes('游戏仍在运行')));
+assert.equal(sliderWrites.length,1);assert.equal(notifications.length,beforeFailureNotifications+1);assert.match(notifications.at(-1).body,/游戏仍在运行/);await reopenUI();assert.equal(sliderWrites.length,1,'opening does not retry a failed change');
+methods.settings_preflight=async()=>({ok:true,data:true});
+for(const invalid of [-1,4,NaN,1.5]) multiplier().onChange(invalid);
+assert.equal(api.selectionSnapshot().fgDraft,null);assert.equal(sliderWrites.length,1);
+let finishSliderSave;
+methods.opti_settings=async(id,value)=>{sliderWrites.push(copy(value));await new Promise(resolve=>{finishSliderSave=resolve;});info.opti.settings=copy(value);return {ok:true,data:true};};
+multiplier().onChange(2);
+api.updateSelection({...api.selectionSnapshot(),actionBusy:true});
+await new Promise(resolve=>setTimeout(resolve,450));
+assert.equal(sliderWrites.length,1,'busy work must defer the pending slider save');assert.equal(multiplier().value,2);
+api.updateSelection({...api.selectionSnapshot(),actionBusy:false});
+await new Promise(resolve=>setTimeout(resolve,180));
+assert.equal(sliderWrites.length,2);assert.equal(multiplier().value,2,'thumb stays at requested value while saving');
+finishSliderSave();await settle();assert.equal(multiplier().value,2);
+methods.opti_settings=async(id,value)=>{sliderWrites.push(copy(value));info.opti.settings=copy(value);return {ok:true,data:true};};
+let oldFgMenu=nodes(render()).find(n=>n.props?.label==='帧生成输出').props;
+multiplier().onChange(3);oldFgMenu.onChange({data:'fsrfg'});await settle();
+await new Promise(resolve=>setTimeout(resolve,450));
+assert.equal(info.opti.settings.fg,'fsrfg','a later explicit FG selection must cancel an earlier slider intent');
+assert.equal(sliderWrites.length,3,'cancelled slider must not issue a delayed write');
+info.opti.settings={...info.opti.settings,fg:'xefg',fg_multiplier:'3'};await reopenUI();
+const beforeNoopNotice=notifications.length;multiplier().onChange(2);await settle();
+assert.equal(notifications.length,beforeNoopNotice,'no restart notice when the setting did not change');
+context.document.documentElement.lang='en';
+const englishSlider=nodes(render()).find(n=>n.type==='slider'&&n.props.label.startsWith('FG multiplier')).props;
+englishSlider.onChange(3);await settle();assert.equal(notifications.at(-1).body,'Restart the game to apply your changes.');
+context.document.documentElement.lang='zh-cn';
+console.log('PASS: slider coalescing, menu remount, manual collapse, runtime refusal, no hidden retry, and version labels.');
 // Reopening attaches to a backend operation without starting a second install.
 for(const cleanup of cleanups)cleanup();cleanups.length=0;slots.length=0;effects.length=0;
 operation={...operation,operation_id:'download-2',phase:'downloading',running:true,downloaded_bytes:3145728,total_bytes:null,revision:10};
@@ -411,10 +456,10 @@ for(const managedSource of [false,true]) {
   info.opti={managed:managedSource,installed:managedSource,incomplete:false,version:'0.9.4',status:managedSource?'active':'',injection_enabled:true,rollback:false,settings:{sr:'xess',fg:'native',fg_input:'upscaler',spoof:'real'}};
   for(const wanted of ['ghfast','ghproxy','github']) {
     clearUI();await mountUI();
-    if(managedSource)button('高级设置').onClick();
+    if(managedSource)button('高级设置')?.onClick();
     const menu=sourceChoice();
     clearUI();menu.onChange({data:wanted});await mountUI();
-    if(managedSource)button('高级设置').onClick();
+    if(managedSource)button('高级设置')?.onClick();
     assert.equal(sourceChoice().selectedOption,wanted,'source survives callback while unmounted');
     // A late callback must also notify a replacement instance that is already mounted.
     menu.onChange({data:'ghfast'});assert.equal(sourceChoice().selectedOption,'ghfast');
@@ -427,7 +472,7 @@ for(const managedSource of [false,true]) {
     button('安装所选版本').onClick();await settle();
     assert.equal(received,wanted,'install RPC uses selected source after native menu remount');
     clearUI();await mountUI();
-    if(managedSource)button('高级设置').onClick();
+    if(managedSource)button('高级设置')?.onClick();
     assert.equal(sourceChoice().selectedOption,wanted,'failed download and reopening preserve source');
   }
 }
@@ -443,14 +488,14 @@ info.opti={managed:true,installed:true,incomplete:false,injection_enabled:true,v
   settings:copy(srSettings),settings_recovery:false};
 info.fsr={ready:false,prepared:false,bridge_ready:false,version:'',opti_version:'',reason:'尚未导入 FSR 模型包。'};
 fsrStatusValue={ready:false,version:'',reason:'尚未导入 FSR 模型包。'};
-clearUI();await mountUI();button('高级设置').onClick();
+clearUI();await mountUI();button('高级设置')?.onClick();
 let menu=srChoice();assert.ok(menu);assert.ok(menu.rgOptions.some(item=>item.data==='fsr_xmx'),'FSR-XMX remains selectable before model import');
 assert.equal(menu.rgOptions.map(item=>item.data).join(','),'xess,fsr_xmx,fsr31,fsr22,dlss','inactive XMX keeps legacy upscalers');
-clearUI();menu.onChange({data:'fsr_xmx'});await mountUI();button('高级设置').onClick();
+clearUI();menu.onChange({data:'fsr_xmx'});await mountUI();button('高级设置')?.onClick();
 assert.equal(srChoice().selectedOption,'xess','failed autosave retains the actual saved selection');
 assert.match(textOf(render()),/尚未导入 FSR 模型包/);assert.equal(button('保存设置'),undefined);
 assert.equal(button('导入 FSR 模型包').disabled,false);
-assert.match(srChoice().description,/自动保存/);
+assert.equal(srChoice().description,undefined);
 context.document.documentElement.lang='en';
 assert.ok(nodes(render()).find(n=>n.type==='select'&&n.props.label==='Upscaling output').props.rgOptions.some(item=>item.label==='FSR 4.1.2 Lite XMX'));
 assert.ok(button('Import FSR model package'));
@@ -577,7 +622,7 @@ const readyOverlay={managed:true,installed:true,incomplete:false,injection_enabl
   rollback:false,pending:null,settings_recovery:false,settings:copy(srSettings)};
 savedSelection='42';current='';info.state=null;info.opti=copy(readyOverlay);
 await mountUI();
-assert.ok(button('高级设置'),'advanced settings remain collapsed');
+assert.ok(button('收起高级设置'),'advanced settings default to expanded');
 assert.equal(button(overlayLabel).disabled,false,'overlay is available without XMX enabled');
 assert.match(button(overlayLabel).description,/再次点击可关闭/);
 gameChoice().onChange({data:43});await settle();
@@ -623,13 +668,13 @@ console.log('PASS: visible overlay entry, prerequisites, selected-game RPC, side
 info.state={status:'active',launch:'/autosave/launch %command%',old_launch:''};current=info.state.launch;
 info.fsr={ready:true,prepared:true,bridge_ready:true,version:'4.1.2',opti_version:'10.0.1',reason:''};
 info.opti={...copy(readyOverlay),version:'10.0.1',settings:copy(srSettings)};
-savedSelection='42';await mountUI();button('高级设置').onClick();
+savedSelection='42';await mountUI();button('高级设置')?.onClick();
 let settingsBlocked=true,preflightCalls=0;
 const savedPatches=[];
 methods.settings_preflight=async()=>{preflightCalls++;return settingsBlocked
   ? {ok:false,error:'游戏正在运行，请先退出游戏再更改设置。'} : {ok:true,data:true};};
 methods.opti_settings=async(id,value)=>{savedPatches.push({id,value:copy(value)});info.opti.settings=copy(value);return {ok:true,data:true};};
-let autoMenu=srChoice();clearUI();autoMenu.onChange({data:'fsr_xmx'});await mountUI();button('高级设置').onClick();
+let autoMenu=srChoice();clearUI();autoMenu.onChange({data:'fsr_xmx'});await mountUI();button('高级设置')?.onClick();
 assert.equal(srChoice().selectedOption,'xess','running rejection displays persisted SR, not the rejected choice');
 assert.equal(savedPatches.length,0);assert.match(textOf(render()),/先退出游戏再更改设置/);
 context.document.documentElement.lang='en';assert.match(textOf(render()),/Exit it before changing settings/);
@@ -645,7 +690,7 @@ const mountingDuringSave=mountUI();
 for(let n=0;n<50&&!releaseAutoSave;n++)await new Promise(resolve=>setTimeout(resolve,20));
 assert.ok(releaseAutoSave);assert.equal(button(overlayLabel).disabled,true,'replacement component shares autosave busy state');
 autoMenu.onChange({data:'xess'});assert.equal(savedPatches.length,1,'second callback does not queue a write');
-releaseAutoSave();await mountingDuringSave;button('高级设置').onClick();
+releaseAutoSave();await mountingDuringSave;button('高级设置')?.onClick();
 assert.equal(srChoice().selectedOption,'fsr_xmx');
 assert.deepEqual(savedPatches[0].value,{...srSettings,sr:'fsr_xmx'},'SR patch preserves persisted FG, input, multiplier and identity');
 assert.equal(button('保存设置'),undefined);
@@ -661,7 +706,7 @@ for(let n=0;n<50&&!releaseStaleRead;n++)await new Promise(resolve=>setTimeout(re
 assert.ok(releaseStaleRead);autoMenu.onChange({data:'fsr_xmx'});
 for(let n=0;n<50&&api.selectionSnapshot().settingsSave?.saving;n++)await new Promise(resolve=>setTimeout(resolve,20));
 assert.equal(api.selectionSnapshot().snapshots[42].info.opti.settings.sr,'fsr_xmx');
-releaseStaleRead();await mountingStale;methods.inspect_game=normalInspect;button('高级设置').onClick();
+releaseStaleRead();await mountingStale;methods.inspect_game=normalInspect;button('高级设置')?.onClick();
 assert.equal(srChoice().selectedOption,'fsr_xmx','older mount result cannot publish its XeSS snapshot over saved FSR');
 
 // Ordinary multi-RPC actions and settings saves share ownership in both directions.
@@ -686,17 +731,17 @@ savedSelection='42';current='/version-menu/launch %command%';
 info.state={status:'active',launch:current,old_launch:''};
 info.opti={...copy(readyOverlay),version:pinned10,settings:copy(srSettings)};
 info.fsr={ready:true,prepared:true,bridge_ready:true,version:'4.1.2',opti_version:pinned10,reason:''};
-await mountUI();button('高级设置').onClick();
+await mountUI();button('高级设置')?.onClick();
 const versionChoice=()=>nodes(render()).find(n=>n.props?.label==='Opti 安装版本')?.props;
 assert.equal(versionChoice().selectedOption,pinned10,'installed10 is the default installation target');
 assert.equal(versionChoice().rgOptions.map(option=>option.data).join(','),`${pinned10},0.9.4,0.7.9`);
 assert.match(versionChoice().description,/当前已安装：10/);
 assert.equal(button('安装所选版本').disabled,false,'active XMX is handled by the install flow');
-let versionMenu=versionChoice();clearUI();versionMenu.onChange({data:'0.9.4'});await mountUI();button('高级设置').onClick();
+let versionMenu=versionChoice();clearUI();versionMenu.onChange({data:'0.9.4'});await mountUI();button('高级设置')?.onClick();
 assert.equal(versionChoice().selectedOption,'0.9.4','explicit version target survives native menu remount');
 assert.match(button('安装所选版本').description,/自动暂时关闭 XMX/);
 assert.equal(info.opti.version,pinned10,'changing the target does not install or downgrade');
-versionMenu=versionChoice();clearUI();versionMenu.onChange({data:pinned10});await mountUI();button('高级设置').onClick();
+versionMenu=versionChoice();clearUI();versionMenu.onChange({data:pinned10});await mountUI();button('高级设置')?.onClick();
 assert.equal(versionChoice().selectedOption,pinned10);
 for(const invalid of ['10-latest','unknown',''])versionChoice().onChange({data:invalid});
 assert.equal(versionChoice().selectedOption,pinned10,'unknown versions cannot enter the session');
@@ -827,7 +872,7 @@ assert.deepEqual(localSources,[{version:'0.9.4',source:'local'}],'the cached ins
 for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));await reopenUI();
 assert.equal(localRequests,1,'local failure never silently retries through a remote source');
 assert.equal(sourceChoice().selectedOption,'local');
-info.opti={...copy(readyOverlay),version:'0.9.4'};await reopenUI();button('高级设置').onClick();
+info.opti={...copy(readyOverlay),version:'0.9.4'};await reopenUI();button('高级设置')?.onClick();
 assert.equal(sourceChoice().selectedOption,'local','managed install entry uses the same cache preference');
 versionChoice().onChange({data:'0.7.9'});assert.equal(sourceChoice().selectedOption,'ghproxy','explicit source choice remains attached to its version');
 versionChoice().onChange({data:pinned10});assert.equal(sourceChoice().selectedOption,'github');
@@ -865,7 +910,7 @@ methods.fsr_prepare=async(id,exe,before,source)=>{
   info.opti.pending={expected:before,target:'/new-opti/launch %command%',kind:'fsr_prepare'};
   return {ok:true,data:copy(info.opti.pending)};
 };
-await mountUI();button('高级设置').onClick();button('安装所选版本').onClick();await settle();
+await mountUI();button('高级设置')?.onClick();button('安装所选版本').onClick();await settle();
 assert.deepEqual(prepareInstallCalls,['restore','confirm_restore','fsr_prepare','opti_confirm','enable_fresh_route','confirm_enable']);
 assert.equal(info.state.status,'active');assert.equal(current,'/after-xmx/launch %command%');
 clearUI();
