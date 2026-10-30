@@ -144,6 +144,8 @@ const english: Record<string, string> = {
   'Opti 注入已关闭；这里的设置将在重新开启后生效。': 'Opti injection is off. These settings apply when it is turned back on.',
   '游戏原生（不接管）': 'Native (no FG interception)', 'FSR 帧生成': 'FSR Frame Generation', 'XeSS 帧生成（实验）': 'XeSS Frame Generation (experimental)', 'XeSS 3 帧生成（实验）': 'XeSS 3 Frame Generation (experimental)',
   '游戏 FG 类型': 'Game FG input', '选择游戏实际支持的类型，并在游戏里开启对应帧生成。无原生 FG 才选超分输入。': 'Select a supported input and enable it in the game. Use upscaler input when the game has no native FG.',
+  '使用 Opti 插帧时，请先关闭游戏内插帧，避免冲突。': 'When using Opti frame generation, first turn off frame generation in the game to avoid conflicts.',
+  '在游戏内开启所选类型的帧生成。': 'Enable the selected frame generation type in the game.',
   '无原生 FG：使用超分输入': 'No native FG: use upscaler input', '显卡伪装': 'GPU spoofing',
   'XMX 开启时保留真实 Intel 身份。': 'XMX retains the real Intel GPU identity.',
   '实验兼容选项；改身份不保证解锁功能。': 'Experimental compatibility option. Spoofing does not guarantee feature support.',

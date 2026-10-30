@@ -651,7 +651,7 @@ function Content() {
               notchLabels={[t('原生'),'2×','3×','4×'].map((label,notchIndex)=>({label,notchIndex}))}
               onChange={value=>scheduleMultiplier(appid,value)} />}
             {settings.fg!=='native' && <DropdownItem layout="below" label={t('游戏 FG 类型')} disabled={busy || configBlocked} selectedOption={settings.fg_input}
-              description={t('选择游戏支持的帧生成类型。')}
+              description={t(settings.fg_input==='upscaler' ? '使用 Opti 插帧时，请先关闭游戏内插帧，避免冲突。' : '在游戏内开启所选类型的帧生成。')}
               rgOptions={options([['fsrfg30','FSR 3.0 FG'],['fsrfg','FSR 3.1 FG'],['dlssg','DLSS FG'],['upscaler',t('无原生 FG：使用超分输入')]])}
               onChange={v=>void saveSettingsPatch(appid,{fg_input:String(v.data)})} />}
             <DropdownItem layout="below" label={t('显卡伪装')} disabled={busy || active || configBlocked || selectedSR==='fsr_xmx'} selectedOption={selectedSR==='fsr_xmx'?'real':settings.spoof}
