@@ -80,6 +80,56 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.m.confirm_launch(42,restored['old_launch'])['status'],'restored')
         self.assertEqual(self.enable()['status'],'pending_launch')
 
+    def test_empty_original_launch_can_restore_and_reenable_without_replacing_journal(self):
+        original_ini = (self.game/'OptiScaler.ini').read_bytes()
+        first = self.m.enable(42, 'game.exe', 'opti', '')
+        first_state = Path(first['state'])
+        self.assertEqual(first['old_launch'], '')
+        self.assertEqual(self.m.confirm_launch(42, first['launch'])['status'], 'active')
+
+        restored = self.m.restore(42, '')
+        self.assertEqual(restored['old_launch'], '')
+        self.assertEqual(restored['status'], 'pending_restore_launch')
+        self.assertEqual((self.game/'libxess.dll').read_bytes(), b'old fixture')
+        self.assertEqual((self.game/'OptiScaler.ini').read_bytes(), original_ini)
+        self.assertEqual(self.m.confirm_launch(42, '')['status'], 'restored')
+
+        second = self.m.enable(42, 'game.exe', 'opti', '')
+        self.assertNotEqual(second['state'], str(first_state))
+        self.assertEqual(self.m.confirm_launch(42, second['launch'])['status'], 'active')
+        self.assertEqual(self.m.state(42)['old_launch'], '')
+        self.assertEqual(json.loads((first_state/'plugin.json').read_text())['status'], 'restored')
+
+    def test_empty_current_launch_restores_nonempty_original_and_reenable(self):
+        record = self.m.enable(42, 'game.exe', 'opti', '%command%')
+        first_state = Path(record['state'])
+        self.m.confirm_launch(42, record['launch'])
+        restored = self.m.restore(42, '')
+        self.assertEqual(restored['status'], 'pending_restore_launch')
+        self.assertEqual(restored['old_launch'], '%command%')
+        self.assertEqual((self.game/'libxess.dll').read_bytes(), b'old fixture')
+        self.assertEqual(self.m.confirm_launch(42, '%command%')['status'], 'restored')
+
+        second = self.m.enable(42, 'game.exe', 'opti', '%command%')
+        self.assertNotEqual(second['state'], str(first_state))
+        self.assertEqual(self.m.confirm_launch(42, second['launch'])['status'], 'active')
+        self.assertEqual(json.loads((first_state/'plugin.json').read_text())['status'], 'restored')
+
+    def test_empty_current_launch_keeps_foreign_game_file_and_shim_on_restore_conflict(self):
+        record = self.m.enable(42, 'game.exe', 'opti', '%command%')
+        self.m.confirm_launch(42, record['launch'])
+        shim = Path(record['shim_path'])
+        shim_before = shim.read_bytes()
+        library = self.game/'libxess.dll'
+        library.write_bytes(b'foreign game update')
+
+        with self.assertRaisesRegex(RuntimeError, '文件已被游戏或其他工具修改'):
+            self.m.restore(42, '')
+
+        self.assertEqual(library.read_bytes(), b'foreign game update')
+        self.assertEqual(shim.read_bytes(), shim_before)
+        self.assertEqual(self.m.state(42)['status'], 'active')
+
     def test_live_game_rejected_before_backup(self):
         with patch.object(engine,'game_idle',side_effect=RuntimeError('live game')):
             with self.assertRaisesRegex(RuntimeError,'live game'): self.enable()

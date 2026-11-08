@@ -381,7 +381,7 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
         record = self.state(appid)
         if not record or record['status'] == 'restored':
             raise RuntimeError('没有需要恢复的接入')
-        if actual not in (record['old_launch'], record.get('launch')):
+        if actual not in (record['old_launch'], record.get('launch'), ''):
             raise RuntimeError('启动项已被其他工具修改；保留改动，请先恢复本插件启动项再重试')
         prefix = Path(record['prefix'])
         with rt.prefix_lock(prefix):

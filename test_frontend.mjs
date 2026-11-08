@@ -108,6 +108,18 @@ assert.ok(notifications.some(n=>n.title.includes('未完成')));
 current='external %command%';
 await assert.rejects(()=>api.writeLaunch(42,'overwrite','stale'),/刚被其他工具修改/);
 assert.equal(writes,2);assert.ok(unregisters>=8);
+const enableCallsBeforeRecovery=enableCalls;
+info.state={status:'active',launch:'/recorded/xmx-launch %command%',old_launch:'%command%'};
+current='';await reopenUI();
+assert.equal(toggle().checked,false,'an empty Steam entry reports the saved XMX setup as needing recovery');
+toggle().onChange(true);await settle();
+assert.equal(current,info.state.launch,'reenabling restores the existing recorded XMX launcher');
+assert.equal(enableCalls,enableCallsBeforeRecovery,'recovery reuses the old journal instead of creating another setup');
+current='';await reopenUI();
+assert.ok(button('恢复原配置'));
+button('恢复原配置').onClick();await settle();
+assert.equal(current,'%command%','restoring from an empty Steam entry reinstates the non-empty original options');
+assert.equal(info.state.status,'restored');
 console.log('PASS: automatic selection; toggle on/off; immediate progress; double-click guard; visible errors/toasts; Steam readback and conflict protection.');
 
 current='';rejectEnable=false;
@@ -183,6 +195,9 @@ methods.opti_toggle=async()=>({ok:false,error:'游戏仍在运行。请从 Steam
 englishOpti.props.onChange(false);await settle();
 assert.match(notifications.at(-1).body,/game is still running/);
 assert.equal(nodes(render()).find(n=>n.props?.label==='Opti injection').props.checked,true);
+methods.opti_toggle=async()=>({ok:false,error:'Steam 启动项为空，与活动的 XMX 记录不一致。请使用插件的“开启 XMX”或“恢复原配置”操作，再重试 Opti。'});
+nodes(render()).find(n=>n.props?.label==='Opti injection').props.onChange(false);await settle();
+assert.match(notifications.at(-1).body,/Use the plugin's Enable XMX or Restore original configuration action/);
 context.document.documentElement.lang='zh-cn';
 assert.equal(textOf(toggle().description),'仅限 Intel；更改前请退出游戏。');
 assert.equal(textOf(optiToggle().description),'原生 XeSS 帧生成请关闭。');
@@ -520,7 +535,7 @@ assert.equal(srChoice().selectedOption,'xess','importing a model does not retry 
 // An active old XMX setup is restored and confirmed before Opti 10 prep, then re-enabled with the FSR bridge.
 const fsrCalls=[];let savedFsrSettings=null;
 let expectedSr='fsr_xmx';
-current='/old-xmx/launch %command%';info.state={status:'active',launch:current,old_launch:''};
+current='/old-xmx/launch %command%';info.state={status:'active',launch:current,old_launch:'%command%'};
 info.fsr={ready:true,prepared:false,bridge_ready:false,version:'4.1.2',opti_version:'',reason:''};
 info.opti={...info.opti,version:'0.9.4',settings:copy(srSettings)};
 await reopenUI();
@@ -533,7 +548,7 @@ methods.confirm_launch=async(id,actual)=>{
   return {ok:true,data:copy(info.state)};
 };
 methods.fsr_prepare=async(id,exe,actual,downloadSource)=>{
-  assert.equal(id,42);assert.equal(exe,'game.exe');assert.equal(actual,'');assert.ok(['github','ghfast','ghproxy'].includes(downloadSource));
+  assert.equal(id,42);assert.equal(exe,'game.exe');assert.equal(actual,'%command%');assert.ok(['github','ghfast','ghproxy'].includes(downloadSource));
   assert.equal(info.state.status,'restored','prepare runs only after XMX restore confirmation');fsrCalls.push('fsr_prepare');
   info.fsr={...info.fsr,prepared:true,opti_version:'10.0.1',bridge_ready:false};
   info.opti={...info.opti,version:'10.0.1',pending:{expected:actual,target:'/opti10/launch %command%',kind:'fsr_prepare'}};
@@ -551,8 +566,9 @@ methods.opti_settings=async(id,value,reset)=>{
   assert.equal(value.fg,'xefg');assert.equal(value.fg_input,'fsrfg30');assert.equal(value.fg_multiplier,'3');
   fsrCalls.push('opti_settings');savedFsrSettings=copy(value);info.opti.settings=copy(value);return {ok:true,data:true};
 };
+current='';
 srChoice().onChange({data:'fsr_xmx'});await settle();
-assert.deepEqual(fsrCalls,['restore','confirm_launch','fsr_prepare','opti_confirm','enable','confirm_launch','opti_settings']);
+assert.deepEqual(fsrCalls,['confirm_launch','restore','confirm_launch','fsr_prepare','opti_confirm','enable','confirm_launch','opti_settings']);
 assert.equal(savedFsrSettings.sr,'fsr_xmx');assert.equal(current,'/xmx-fsr/launch %command%');
 assert.equal(info.fsr.bridge_ready,true);assert.equal(info.opti.version,'10.0.1');
 

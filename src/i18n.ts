@@ -165,6 +165,7 @@ const english: Record<string, string> = {
   '正在读取游戏列表…': 'Loading games…', '正在检查这个游戏…': 'Checking this game…',
   '未找到已安装的 Steam 游戏。': 'No installed Steam games found.',
   '启动项已被其他工具修改，请检查后再试。': 'Launch options changed elsewhere. Check them before retrying.',
+  'Steam 启动项为空，与活动的 XMX 记录不一致。请使用插件的“开启 XMX”或“恢复原配置”操作，再重试 Opti。': "Steam launch options are empty and do not match the active XMX record. Use the plugin's Enable XMX or Restore original configuration action, then retry Opti.",
   '发现多个游戏程序，请在下面确认一次。': 'Multiple game executables found. Select one below.',
   '正在开启 XMX，请稍候…': 'Enabling XMX…', '正在关闭 XMX，恢复原配置…': 'Disabling XMX and restoring the original setup…',
   '上次设置未完成，请先点击恢复。': 'The previous setup is incomplete. Restore it first.',

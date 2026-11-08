@@ -323,7 +323,10 @@ class OptiMixin:
         xmx = info['state']
         if xmx and xmx['status'] not in ('restored','failed'):
             if not allow_xmx or xmx['status'] != 'active': raise RuntimeError('请先关闭 XMX，再安装、回退或卸载 Opti')
-            if actual != xmx['launch']: raise RuntimeError('Steam 启动项与 XMX 记录不一致')
+            if actual != xmx['launch']:
+                if actual == '':
+                    raise RuntimeError('Steam 启动项为空，与活动的 XMX 记录不一致。请使用插件的“开启 XMX”或“恢复原配置”操作，再重试 Opti。')
+                raise RuntimeError('Steam 启动项与 XMX 记录不一致')
         r = self.opti_record(appid)
         self.opti_require_settings_complete(r)
         if r and r.get('pending'): raise RuntimeError('上次操作待完成，请先完成启动项设置或回退')

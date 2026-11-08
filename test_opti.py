@@ -204,6 +204,20 @@ class Lifecycle(Tests):
         self.m.restore(42,x['launch']);self.m.confirm_launch(42,launch)
         self.m.opti_uninstall(42,launch)
 
+    def test_missing_launch_during_active_xmx_returns_recovery_guidance_without_mutation(self):
+        self.fresh();launch=self.install_opti()
+        x=self.m.enable(42,'game.exe','opti',launch);self.m.confirm_launch(42,x['launch'])
+        dxgi=(self.game/'dxgi.dll').read_bytes()
+        library=(self.game/'libxess.dll').read_bytes()
+
+        with self.assertRaisesRegex(RuntimeError, '启动项为空.*插件.*开启 XMX.*恢复原配置.*Opti'):
+            self.m.opti_toggle(42,False,'')
+
+        self.assertEqual(self.m.state(42)['status'],'active')
+        self.assertEqual(self.m.opti_record(42)['pending'],None)
+        self.assertEqual((self.game/'dxgi.dll').read_bytes(),dxgi)
+        self.assertEqual((self.game/'libxess.dll').read_bytes(),library)
+
     def test_disabled_opti_allows_native_xmx_and_rollback(self):
         self.fresh();launch=self.install_opti()
         p=self.m.opti_toggle(42,False,launch);self.m.opti_confirm(42,p['target'])
