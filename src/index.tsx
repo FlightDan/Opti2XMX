@@ -154,7 +154,8 @@ async function writeLaunch(id: number, desired: string, expected: string): Promi
 async function finish(id: number, setup: Setup, restoring = false) {
   const before = await readLaunch(id);
   const target = restoring ? setup.old_launch : setup.launch!;
-  if (before !== setup.old_launch && before !== setup.launch)
+  const recoversMissingLaunch = before === '' && ['active', 'pending_launch', 'pending_restore_launch'].includes(setup.status);
+  if (before !== setup.old_launch && before !== setup.launch && !recoversMissingLaunch)
     throw new Error(t('启动项已被其他工具修改，请检查后再试。'));
   const actual = before === target ? before : await writeLaunch(id, target, before);
   unwrap(await confirm(id, actual));
@@ -167,6 +168,10 @@ async function applyPendingLaunch(id: number, before: string, next: Pending) {
 async function saveFSRSettings(id: number, desired: Settings, source: DownloadSource, manual: string) {
   let currentInfo = unwrap(await inspect(id));
   let launch = await readLaunch(id);
+  if (currentInfo.state?.status === 'active' && launch === '') {
+    await finish(id, currentInfo.state);
+    currentInfo = unwrap(await inspect(id)); launch = await readLaunch(id);
+  }
   let xmxActive = currentInfo.state?.status === 'active' && launch === currentInfo.state.launch;
   const executable = () => currentInfo.automatic.executable
     || (currentInfo.executables.includes(manual) && currentInfo.automatic.candidates.includes(manual) ? manual : '');

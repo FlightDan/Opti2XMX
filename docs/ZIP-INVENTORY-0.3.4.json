@@ -1,0 +1,194 @@
+{
+  "version": "0.3.4",
+  "archive": "opti2xmx-0.3.4.zip",
+  "size": 1487883,
+  "sha256": "5556d312594625fd6ab60e6d9c5778d5ec72b6846af2522bef94b9bc00545f74",
+  "member_count": 37,
+  "members": [
+    {
+      "path": "opti2xmx/LICENSE",
+      "size": 36356,
+      "sha256": "9cf448c34a21ce7a4f637264c7bc89ed46403ad939d08aa1d35584a975ad354d"
+    },
+    {
+      "path": "opti2xmx/README.md",
+      "size": 7783,
+      "sha256": "dd7bac2e33caa348632aae7b00d632487b88a05de1ec94f921db33bbfaee5714"
+    },
+    {
+      "path": "opti2xmx/README.zh-CN.md",
+      "size": 7062,
+      "sha256": "cac8de38cae72a536a6470cca53ceae69f29a91523a308bd0f8a27b3b880c22c"
+    },
+    {
+      "path": "opti2xmx/THIRD_PARTY_NOTICES.md",
+      "size": 2552,
+      "sha256": "fb112ce2c4a52c275b92eec29c4289fefe908ba897ffb7c7579dcdb218d2d6ff"
+    },
+    {
+      "path": "opti2xmx/dist/index.js",
+      "size": 76164,
+      "sha256": "e67b823451c5d6e6a7af44b9b1ca1dfcc51fcb3122864dc322e702806c7f2346"
+    },
+    {
+      "path": "opti2xmx/docs/FRAME_GENERATION.md",
+      "size": 11312,
+      "sha256": "0545d10c945e1065f750d0ce88ddbdbacf16a69c393912d9495053c20c05a18c"
+    },
+    {
+      "path": "opti2xmx/docs/FSR_XMX.md",
+      "size": 3079,
+      "sha256": "9213f79698177320aa69688c4ead83f55511881b181d3981e5bc99fb3522af4d"
+    },
+    {
+      "path": "opti2xmx/docs/RUNTIME.md",
+      "size": 7754,
+      "sha256": "355957683b63c950425e2e9a85da33d48226278152aa6f94ca953236da824da1"
+    },
+    {
+      "path": "opti2xmx/download_progress.py",
+      "size": 2943,
+      "sha256": "b583686246be05c098a8a510e5ee89dfb31dd75f502c4057a0242b8955423e1f"
+    },
+    {
+      "path": "opti2xmx/fsr-source.json",
+      "size": 1600,
+      "sha256": "6c5044b93b05c6148fdaa4e69f75133e9d7a886ce2c25a6f6afdeb7fd44ba625"
+    },
+    {
+      "path": "opti2xmx/fsr.py",
+      "size": 12165,
+      "sha256": "889fe528ebc7ffc8236f04c08652378cd11ad00e469589674db5cfbcb0dedaca"
+    },
+    {
+      "path": "opti2xmx/fsr_cm.py",
+      "size": 2185,
+      "sha256": "26c1c14e2fd0e347cc7e4dc10a8f6ad7ae8e977d7efb34e0aeb0078aeb322e55"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/bin/fsrxdec.dll",
+      "size": 19968,
+      "sha256": "db8a6260fa6b29d46d7c7b4dcaf7c347fdccc6e9adab5fbe97039066eddd22cf"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/bin/libwim-15.dll",
+      "size": 497678,
+      "sha256": "ba853ee1e3fc5f5798581f02e8e066ba07a0a2375f0bf444fe981431fd508495"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/licenses/fsrxdec-LICENSE.txt",
+      "size": 36356,
+      "sha256": "9cf448c34a21ce7a4f637264c7bc89ed46403ad939d08aa1d35584a975ad354d"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/licenses/wimlib/COPYING.GPLv3.txt",
+      "size": 35823,
+      "sha256": "230184f60bae2feaf244f10a8bac053c8ff33a183bcc365b4d8b876d2b7f4809"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/licenses/wimlib/COPYING.LGPL.txt",
+      "size": 26920,
+      "sha256": "b14c366c41cc9f62dc20ec1a0885f278cf9681076d98027012a910fca5e89639"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/licenses/wimlib/COPYING.libdivsufsort-lite.txt",
+      "size": 1144,
+      "sha256": "6783c2be541a8871bccfd0e9a26253def3a32922fb1da5344b6bbd43cbab851f"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/licenses/wimlib/COPYING.txt",
+      "size": 1732,
+      "sha256": "ed5cc16630b6aa5edaf9cfd440dbf5eda8e2257471752ead93634ac8eb102583"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/manifest.json",
+      "size": 2972,
+      "sha256": "8c6a39e2c8564d3fc095c5c20a2795b10900596fae0eec8c1177563cefd4c177"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/sources/fsr_compat/LICENSE",
+      "size": 36356,
+      "sha256": "9cf448c34a21ce7a4f637264c7bc89ed46403ad939d08aa1d35584a975ad354d"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/sources/fsr_compat/README.md",
+      "size": 3600,
+      "sha256": "287e2177ce4d4abb41c93256dfac53b8da5b9e3434dd96e49fed5e3e7c910530"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/sources/fsr_compat/build.ps1",
+      "size": 6422,
+      "sha256": "76c3c2ce2f95f3f76f46a293ede86486dff2f1db0b82b81350d6044d960653d6"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/sources/fsr_compat/dependency-source.json",
+      "size": 1090,
+      "sha256": "6d451eb1cfb816e873661f8d595f1fc88ed53e825754f6da0c21aada84a14daa"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/sources/fsr_compat/fsrxdec.c",
+      "size": 8837,
+      "sha256": "ec5c7ff29ffee3d301cf33616eb9260ec139bf751fa2b6b57c4fb5633f2edfd0"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/sources/fsr_compat/fsrxdec.def",
+      "size": 96,
+      "sha256": "1c696ba0902bc653dabb2f741e2cf7a3191b2035fc43253beb5e85b8edb38a77"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/sources/fsr_compat/test_fsrxdec.py",
+      "size": 11984,
+      "sha256": "74fb24e110e65da305a0f2bc0e16acec46114e27dffbc5fd53259b9bd0faa8c9"
+    },
+    {
+      "path": "opti2xmx/fsr_compat/sources/wimlib-1.14.5.tar.gz",
+      "size": 1073578,
+      "sha256": "84221a3abd5b91228f15f8e6065c335a336237b5738197b75bf419eea561a194"
+    },
+    {
+      "path": "opti2xmx/main.py",
+      "size": 4804,
+      "sha256": "376a4554e04c622f36afd0fcd040cde7e96fd7bda9cf53514bb963c40654c9db"
+    },
+    {
+      "path": "opti2xmx/manager.py",
+      "size": 21773,
+      "sha256": "99bc4c7a65dc34aeaabb857653018c0b2bfd7fedc02450a848a004716c446bf3"
+    },
+    {
+      "path": "opti2xmx/opti-archive-files.json",
+      "size": 7929,
+      "sha256": "03ab5389cc7f087f095295b2a9a7414389232857ba59eb74ce2325ac8f0dbe2a"
+    },
+    {
+      "path": "opti2xmx/opti.py",
+      "size": 55543,
+      "sha256": "965de7c06f6e9364dd6bcaa26f1c33253a87144f11ab7d8abf879358e9e26c97"
+    },
+    {
+      "path": "opti2xmx/package.json",
+      "size": 617,
+      "sha256": "ef2e1dc1c6b54a3fb67926d0d0f37f216f4e5d21670afd023b6ce19697604cf8"
+    },
+    {
+      "path": "opti2xmx/per_game.py",
+      "size": 30627,
+      "sha256": "da0dad5b2043c63bc7d6fd45da21507a414578aba5dc36b8731991d85c6140cb"
+    },
+    {
+      "path": "opti2xmx/plugin.json",
+      "size": 232,
+      "sha256": "60120e7e4d1914b49805c1a3499bffc43c3833e5190b3896d0f8f3ab72482bcf"
+    },
+    {
+      "path": "opti2xmx/runtime-source.json",
+      "size": 300,
+      "sha256": "2b207a1c94a92f4a695e787096ad6e2268e038e32e5368217ceff9c8bb158670"
+    },
+    {
+      "path": "opti2xmx/runtime_setup.py",
+      "size": 12856,
+      "sha256": "dfda0289c9e2ec8d2568e31217b5cb780bd515538a06f159d693d8c55bb42dc0"
+    }
+  ]
+}
