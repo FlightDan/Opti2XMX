@@ -33,6 +33,101 @@ class Lifecycle(Tests):
         r=self.m.opti_migrate(42,'game.exe',actual)
         self.m.opti_confirm(42,r['target']);return r['target']
 
+    def test_reinstall_known_v10_and_uninstall_does_not_revive_old_opti(self):
+        import hashlib
+        def pin(data): return dict(size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+        old_core=b'MZ OptiScaler old v10'; old_support=b'old support'; new_core=b'MZ OptiScaler new'
+        (self.game/'dxgi.dll').write_bytes(old_core)
+        (self.game/'libxess.dll').write_bytes(b'new fixture')
+        (self.game/'amd_fidelityfx_dx12.dll').write_bytes(b'unrelated native')
+        nested=self.game/'OptiScaler'; nested.mkdir()
+        (nested/'fsr-original.dll').write_bytes(old_support)
+        (self.payload/'OptiScaler.dll').write_bytes(new_core)
+        pins={'dxgi.dll':[pin(old_core)], 'OptiScaler/fsr-original.dll':[pin(old_support)]}
+        with patch('opti.pinned_core_version', return_value='10.0.0-pre1_20261025'), patch('opti.reinstall_pins', return_value=pins):
+            with self.assertRaisesRegex(RuntimeError,'归属'): self.m.opti_migrate(42,'game.exe','')
+            pending=self.m.opti_reinstall(42,'game.exe','','0.9.4','github')
+            self.m.opti_confirm(42,pending['target'])
+        self.assertEqual((self.game/'dxgi.dll').read_bytes(),new_core)
+        self.assertFalse((nested/'fsr-original.dll').exists())
+        self.assertEqual((self.game/'amd_fidelityfx_dx12.dll').read_bytes(),b'unrelated native')
+        self.assertNotIn('fsr31',(self.game/'OptiScaler.ini').read_text())
+        removed=self.m.opti_uninstall(42,pending['target']);self.m.opti_confirm(42,removed['target'])
+        self.assertFalse((self.game/'dxgi.dll').exists())
+        self.assertFalse((self.game/'OptiScaler.ini').exists())
+        self.assertEqual((self.game/'libxess.dll').read_bytes(),b'new fixture')
+
+    def test_reinstall_pins_include_public_core_and_private_model_variants(self):
+        from fsr import descriptor
+        from opti import archive_files, archive_pin, reinstall_pins
+        version='10.0.0-pre1_20261025'
+        public=archive_files(version,archive_pin(version))
+        pins=reinstall_pins(); model=descriptor()
+        self.assertIn(public['OptiScaler.dll'],pins['dxgi.dll'])
+        self.assertIn(public['OptiScaler/libxess.dll'],pins['OptiScaler/libxess.dll'])
+        variants=pins['OptiScaler/amd_fidelityfx_upscaler_dx12.dll']
+        self.assertIn(model['files']['amd_fidelityfx_upscaler_dx12.dll'],variants)
+        self.assertIn(model['patched_upscaler_sha256'],[row['sha256'] for row in variants])
+        self.assertIn(model['files']['fsr-original.dll'],pins['OptiScaler/fsr-original.dll'])
+
+    def test_reinstall_v10_removes_old_layout_and_keeps_shared_originals(self):
+        import hashlib
+        def pin(data): return dict(size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+        original = {
+            'dxgi.dll': b'MZ OptiScaler old',
+            'OptiScaler.ini': b'[Upscalers]\nDx12Upscaler=fsr31\n',
+            'libxess.dll': b'old shared SDK',
+            'OptiScaler/amd_fidelityfx_upscaler_dx12.dll': b'old private model',
+            'OptiScaler/fsr-original.dll': b'old private base model',
+            'OptiScaler/igdext64.dll': b'old private shim',
+            'D3D12_Optiscaler/D3D12Core.dll': b'old legacy support',
+            'fsrxdec.dll': b'old decompressor adapter',
+            'amd_fidelityfx_dx12.dll': b'unrelated stock DLL',
+        }
+        for relative, data in original.items():
+            path=self.game/relative
+            path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_bytes(data)
+        v10_sdk=self.payload/'OptiScaler/libxess.dll'
+        v10_sdk.parent.mkdir()
+        v10_sdk.write_bytes(b'fresh SDK')
+        (v10_sdk.parent/'amd_fidelityfx_upscaler_dx12.dll').write_bytes(b'fresh private DLL')
+        pins={path:[pin(data)] for path,data in original.items() if path != 'amd_fidelityfx_dx12.dll'}
+        compat=self.home/'adapter.dll'
+        compat.write_bytes(original['fsrxdec.dll'])
+        with patch('opti.pinned_core_version', return_value='10.0.0-pre1_20261025'), \
+             patch('opti.reinstall_pins', return_value=pins), patch.object(self.m, '_fsr_compat', return_value={'fsrxdec.dll': compat}):
+            install=self.m.opti_reinstall(42,'game.exe','','10.0.0-pre1_20261025','local')
+            self.m.opti_confirm(42,install['target'])
+            self.assertFalse((self.game/'D3D12_Optiscaler/D3D12Core.dll').exists())
+            self.assertFalse((self.game/'OptiScaler/fsr-original.dll').exists())
+            self.assertFalse((self.game/'OptiScaler/igdext64.dll').exists())
+            self.assertFalse((self.game/'fsrxdec.dll').exists())
+            self.assertEqual((self.game/'libxess.dll').read_bytes(), b'fresh SDK')
+            self.assertEqual((self.game/'amd_fidelityfx_dx12.dll').read_bytes(), original['amd_fidelityfx_dx12.dll'])
+            rollback=self.m.opti_rollback(42,install['target'])
+            self.m.opti_confirm(42,rollback['target'])
+            self.assertEqual({path:(self.game/path).read_bytes() for path in original},original)
+            install=self.m.opti_reinstall(42,'game.exe','','10.0.0-pre1_20261025','local')
+            self.m.opti_confirm(42,install['target'])
+            remove=self.m.opti_uninstall(42,install['target'])
+            self.m.opti_confirm(42,remove['target'])
+        self.assertEqual((self.game/'libxess.dll').read_bytes(),original['libxess.dll'])
+        self.assertFalse((self.game/'dxgi.dll').exists())
+        self.assertFalse((self.game/'OptiScaler.ini').exists())
+        self.assertFalse((self.game/'D3D12_Optiscaler/D3D12Core.dll').exists())
+
+
+    def test_reinstall_foreign_target_refuses_without_writes(self):
+        before=(self.game/'dxgi.dll').read_bytes(), (self.game/'OptiScaler.ini').read_bytes()
+        (self.game/'fakenvapi.ini').write_bytes(b'foreign')
+        (self.payload/'fakenvapi.ini').write_bytes(b'new')
+        with patch('opti.pinned_core_version', return_value='0.9.4'), patch('opti.reinstall_pins', return_value={}):
+            with self.assertRaisesRegex(RuntimeError,'归属'): self.m.opti_reinstall(42,'game.exe','','0.9.4','github')
+        self.assertEqual(before,((self.game/'dxgi.dll').read_bytes(),(self.game/'OptiScaler.ini').read_bytes()))
+        self.assertEqual((self.game/'fakenvapi.ini').read_bytes(),b'foreign')
+        self.assertIsNone(self.m.opti_record(42))
+
     def test_install_remove_rollback_preserves_native_library(self):
         self.fresh();launch=self.install_opti()
         self.assertTrue(self.m.inspect_game(42)['opti']['managed'])
@@ -210,7 +305,7 @@ class Lifecycle(Tests):
         dxgi=(self.game/'dxgi.dll').read_bytes()
         library=(self.game/'libxess.dll').read_bytes()
 
-        with self.assertRaisesRegex(RuntimeError, '启动项为空.*插件.*开启 XMX.*恢复原配置.*Opti'):
+        with self.assertRaisesRegex(RuntimeError, '启动项为空.*插件.*XMX 开关.*修复.*Opti'):
             self.m.opti_toggle(42,False,'')
 
         self.assertEqual(self.m.state(42)['status'],'active')

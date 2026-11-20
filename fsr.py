@@ -221,16 +221,19 @@ class FsrMixin:
         return changes
 
     def fsr_install_bridge(self, state, package):
-        """Make the compiler wrapper independent of future plugin upgrades."""
+        """Set up the FSR DLL environment and the legacy driver correction."""
         rt = self.runtime()
-        source = Path(__file__).with_name('fsr_cm.py')
-        rt.atomic_copy(source, state / 'fsr_cm.py')
-        helper = state / 'fsr-compile.sh'
-        rt.atomic_text(helper, '#!/bin/sh\nset -eu\nexec python3 ' + shlex.quote(str(state / 'fsr_cm.py'))
-                       + ' ' + shlex.quote(str(package / 'tools/cm-compile.sh')) + ' "$@"\n', mode=0o700)
         config = state / 'xmx/game.conf'
         text = config.read_text()
-        text += '\nexport ANV_CM_HELPER=' + shlex.quote(str(helper)) + '\n'
+        if not rt.modern_layout(package):
+            # The current patched ANV driver derives the sampler heap from CMK
+            # metadata's auto-heap sentinel. An explicit heap skips that lookup.
+            source = Path(__file__).with_name('fsr_cm.py')
+            rt.atomic_copy(source, state / 'fsr_cm.py')
+            helper = state / 'fsr-compile.sh'
+            rt.atomic_text(helper, '#!/bin/sh\nset -eu\nexec python3 ' + shlex.quote(str(state / 'fsr_cm.py'))
+                           + ' ' + shlex.quote(str(package / 'tools/cm-compile.sh')) + ' "$@"\n', mode=0o700)
+            text += '\nexport ANV_CM_HELPER=' + shlex.quote(str(helper)) + '\n'
         text += rt.dll_overrides_config('dxgi', 'fsrxdec', 'libwim-15')
         text += 'export FSR4_XMX_NO_DIALOG=1\n'
         rt.atomic_text(config, text)

@@ -47,6 +47,35 @@ class Tests(unittest.TestCase):
     def enable(self):
         return self.m.enable(42, 'game.exe', 'opti', '~/fgmod/fgmod %command%')
 
+    def test_cyberpunk_managed_launch_and_legacy_migration(self):
+        from opti import managed_launch
+        self.assertEqual(managed_launch(42, '/path with space/launch.sh'), "'/path with space/launch.sh' %command%")
+        self.assertEqual(managed_launch(1091500, '/path with space/launch.sh'), "'/path with space/launch.sh' %command% --launcher-skip")
+        (self.steam / 'steamapps/appmanifest_42.acf').unlink()
+        (self.steam / 'steamapps/appmanifest_1091500.acf').write_text('"AppState" { "appid" "1091500" "name" "Cyberpunk" "installdir" "Test Game" }')
+        new_prefix = self.steam / 'steamapps/compatdata/1091500/pfx'
+        new_prefix.parent.mkdir(parents=True)
+        self.prefix.rename(new_prefix); self.prefix = new_prefix
+        original = '%command% --launcher-skip'
+        r = self.m.enable(1091500, 'game.exe', 'opti', original)
+        self.assertTrue(r['launch'].endswith(' %command% --launcher-skip'))
+        r = self.m.confirm_launch(1091500, r['launch'])
+        target = r['launch']; legacy = target.removesuffix(' --launcher-skip')
+        r['launch'] = legacy; self.m.save(r)
+        before = self.m.state(1091500)
+        plan = self.m.inspect_game(1091500)['launcher_skip_update']
+        self.assertEqual(plan, {'expected':legacy, 'target':target})
+        self.assertEqual(self.m.cyberpunk_launcher_skip(1091500, legacy), plan)
+        self.assertEqual(self.m.cyberpunk_launcher_skip(1091500, target), plan)
+        with self.assertRaises(RuntimeError): self.m.cyberpunk_launcher_skip(1091500, 'foreign')
+        with self.assertRaises(RuntimeError): self.m.cyberpunk_launcher_skip(1091500, legacy, True)
+        self.m.cyberpunk_launcher_skip(1091500, target, True)
+        after = self.m.state(1091500)
+        self.assertEqual(after, dict(before, launch=target))
+        self.assertEqual(after['old_launch'], original)
+        self.assertEqual(self.m.cyberpunk_launcher_skip(1091500, target, True), plan)
+        self.assertNotIn('launcher_skip_update', self.m.inspect_game(1091500))
+
     def test_vdf_empty_comments_escaped(self):
         self.assertEqual(manager.vdf('"root" { // comment\n "empty" "" "quote" "a\\\"b" }'), {'root': {'empty': '', 'quote': 'a"b'}})
 
@@ -55,6 +84,21 @@ class Tests(unittest.TestCase):
         self.assertIn('game.exe', self.m.inspect_game(42)['executables'])
         with self.assertRaises(ValueError): self.m.game(True)
         with self.assertRaises(RuntimeError): self.m.game(43)
+
+    def test_partial_proton_prefix_blocks_xmx_without_transaction(self):
+        windows = self.prefix / 'drive_c/windows'
+        (windows / 'system32').rmdir()
+        windows.rmdir()
+        info = self.m.inspect_game(42)
+        self.assertFalse(info['prefix_ready'])
+        self.assertIn('先从 Steam 用 Proton 启动游戏', info['automatic']['reason'])
+        with self.assertRaisesRegex(RuntimeError, '先从 Steam 用 Proton 启动游戏'):
+            self.enable()
+        self.assertFalse(self.m.pointer(42).parent.exists())
+        self.assertEqual((self.game / 'libxess.dll').read_bytes(), b'old fixture')
+        (self.prefix / 'drive_c/Windows/System32').mkdir(parents=True)
+        self.assertTrue(self.m.inspect_game(42)['prefix_ready'])
+
 
     def test_enable_roundtrip_and_no_foreign_changes(self):
         original = (self.game / 'OptiScaler.ini').read_bytes()

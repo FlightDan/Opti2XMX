@@ -17,10 +17,13 @@ import shutil
 import struct
 import sys
 import uuid
-from opti import OptiMixin
+from opti import OptiMixin, managed_launch
 from download_progress import OperationProgress
 from runtime_setup import RuntimeMixin, modern_layout
 from fsr import FsrMixin
+
+
+PREFIX_INITIALIZATION_HINT = '请先从 Steam 用 Proton 启动游戏一次，退出后重新打开插件。'
 
 
 def vdf(text):
@@ -194,15 +197,29 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
                 if name.lower() == 'optiscaler.ini':
                     optis.append(rel)
         _, _, ready = self.dependencies()
-        owner = Path(g['prefix']) / '.oxp3-xess-owner.json'
+        prefix = Path(g['prefix'])
+        owner = prefix / '.oxp3-xess-owner.json'
+        prefix_issue = ''
+        try:
+            prefix_ready = self.runtime().prefix_is_initialized(prefix)
+        except (OSError, RuntimeError) as error:
+            prefix_ready = False
+            prefix_issue = str(error)
         state = self.state(appid)
         info = dict(**g, executables=sorted(exes), libraries=libraries, optis=optis,
-                    runtime_ready=ready, prefix_ready=(Path(g['prefix']) / 'drive_c').is_dir(),
+                    runtime_ready=ready, prefix_ready=prefix_ready, prefix_issue=prefix_issue,
                     external_managed=owner.exists() and not (state and state['status'] not in ('restored', 'failed')),
                     state=state)
         info['automatic'] = self.automatic(info)
         info['opti'] = self.opti_status(info)
         info['fsr'] = self.fsr_game_status(info)
+        if appid == 1091500 and state and state.get('status') == 'active':
+            try:
+                plan = self._launcher_skip_plan(appid, g, state)
+                if state['launch'] == plan['expected']:
+                    info['launcher_skip_update'] = plan
+            except (OSError, RuntimeError, ValueError, KeyError, TypeError):
+                pass
         return info
 
     def automatic(self, info):
@@ -232,10 +249,10 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
         reason = ''
         if info['external_managed']:
             reason = '此游戏已有其他 XMX 配置，需要先迁移后才能用此开关。'
+        elif not info['prefix_ready']:
+            reason = info.get('prefix_issue') or PREFIX_INITIALIZATION_HINT
         elif not info['runtime_ready']:
             reason = 'XMX 运行组件未就绪。'
-        elif not info['prefix_ready']:
-            reason = '请先从 Steam 用 Proton 启动游戏一次，退出后重新打开插件。'
         elif not info['libraries']:
             reason = '尚未发现 XeSS。请先为此游戏安装 OptiScaler 并运行一次，然后重新打开插件。'
         elif not candidates:
@@ -256,8 +273,10 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
             raise RuntimeError('已有接入或待恢复操作，请先完成恢复')
         if info['external_managed']:
             raise RuntimeError('此游戏已有外部 XMX 接入；保留原配置，暂不接管')
-        if not info['runtime_ready'] or not info['prefix_ready']:
-            raise RuntimeError('需要已安装运行组件，并至少启动过一次该 Proton 游戏')
+        if not info['prefix_ready']:
+            raise RuntimeError(info['prefix_issue'] or PREFIX_INITIALIZATION_HINT)
+        if not info['runtime_ready']:
+            raise RuntimeError('XMX 运行组件未就绪。')
         if executable not in info['executables'] or route not in ('opti', 'native'):
             raise ValueError('请选择检测到的游戏程序和接入方式')
         # Only replace launchers we understand; arbitrary chains may copy DLLs
@@ -266,7 +285,9 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
         self.opti_require_settings_complete(owned)
         if owned and owned.get('pending'):
             raise RuntimeError('上次操作待完成，请先完成启动项设置或回退')
-        if old_launch not in ('', '%command%', '~/fgmod/fgmod %command%', owned['launch'] if owned and owned['status']=='active' else None):
+        known_launches = ('', '%command%', '~/fgmod/fgmod %command%', owned['launch'] if owned and owned['status']=='active' else None)
+        if appid == 1091500: known_launches += ('%command% --launcher-skip',)
+        if old_launch not in known_launches:
             raise RuntimeError('检测到自定义启动项，请先保留并清理，首版不自动合并')
         if route == 'native' and old_launch == '~/fgmod/fgmod %command%':
             raise RuntimeError('检测到 fgmod，请选择 OptiScaler 接入')
@@ -349,7 +370,7 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
                     launcher += rt.dll_overrides_config('dxgi')
                 launcher += 'exec ' + shlex.quote(str(state / 'xmx/launch.sh')) + ' "$@"\n'
                 rt.atomic_text(state / 'launch.sh', launcher, mode=0o700)
-                record['launch'] = shlex.quote(str(state / 'launch.sh')) + ' %command%'
+                record['launch'] = managed_launch(appid, state / 'launch.sh')
                 record['status'] = 'pending_launch'
                 self.save(record)
                 self.opti_sync(appid, [f['path'] for f in record['files']])
@@ -358,8 +379,61 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
             record['status'] = 'recovery_required'
             self.save(record)
             # The UI exposes recovery; do not hide partially applied changes.
-            raise RuntimeError('接入未完成，已保留备份；请点击恢复。' + str(error)) from error
+            raise RuntimeError('接入未完成，备份已保留。请点击「修复」。' + str(error)) from error
         return record
+
+    def _launcher_skip_plan(self, appid, game, record):
+        if appid != 1091500 or not record or record.get('status') != 'active':
+            raise RuntimeError('没有可更新的赛博朋克 XMX 启动项')
+        rt = self.runtime()
+        state = Path(record['state'])
+        core = state / 'xmx'
+        wrapper = state / 'launch.sh'
+        if (record.get('appid') != appid or record.get('game') != game['game']
+                or record.get('prefix') != game['prefix'] or record.get('core_state', str(core)) != str(core)):
+            raise RuntimeError('XMX 记录与当前游戏不一致')
+        for path in (self.pointer(appid), state / 'plugin.json', wrapper, core / 'manifest.json'):
+            rt.no_symlink_parents(path)
+            if not path.is_file() or path.is_symlink() or path.stat().st_uid != os.getuid():
+                raise RuntimeError('XMX 状态文件无效')
+        manifest = rt.load(core)
+        owner = Path(game['prefix']) / '.oxp3-xess-owner.json'
+        rt.no_symlink_parents(owner)
+        if (manifest.get('status') != 'active' or manifest.get('prefix') != game['prefix']
+                or manifest.get('game_exe') != Path(record['executable']).name
+                or not owner.is_file() or owner.is_symlink() or owner.stat().st_uid != os.getuid()
+                or owner.read_text().strip() != str(core)):
+            raise RuntimeError('XMX 前缀所有权不匹配')
+        opti = self.opti_record(appid)
+        self.opti_require_settings_complete(opti)
+        if opti and (opti.get('pending') or opti.get('status') not in ('active', 'removed', 'rolled_back')):
+            raise RuntimeError('请先完成 Opti 操作')
+        expected = shlex.quote(str(wrapper)) + ' %command%'
+        target = managed_launch(appid, wrapper)
+        if record.get('launch') not in (expected, target):
+            raise RuntimeError('XMX 启动项记录不匹配')
+        return {'expected': expected, 'target': target}
+
+    def cyberpunk_launcher_skip(self, appid, actual, commit=False):
+        if type(appid) is not int or appid != 1091500 or not isinstance(actual, str) or type(commit) is not bool:
+            raise RuntimeError('赛博朋克启动项请求无效')
+        rt = self.runtime()
+        rt.ordinary_user()
+        game = self.game(appid)
+        prefix = Path(game['prefix'])
+        with rt.prefix_lock(prefix):
+            record = self.state(appid)
+            plan = self._launcher_skip_plan(appid, game, record)
+            rt.game_idle(prefix, Path(record['executable']).name)
+            if actual not in (plan['expected'], plan['target']):
+                raise RuntimeError('Steam 启动项已变化，请检查后重试')
+            if commit:
+                if actual != plan['target']:
+                    raise RuntimeError('Steam 启动项尚未确认')
+                if record['launch'] != plan['target']:
+                    record['launch'] = plan['target']
+                    self.save(record)
+            return plan
 
     def confirm_launch(self, appid, actual):
         self.game(appid)

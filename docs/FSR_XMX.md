@@ -36,10 +36,12 @@ adapts only the model DLL's Cabinet import name to the dedicated adapter. No
 Microsoft Cabinet DLL is copied or redistributed, and the game's system Cabinet
 imports are not replaced.
 
-The CM compiler wrapper corrects the verified PRE kernel's descriptor-table
-offset, including its trailing sampler table. It changes only CMK resource
-metadata; XeSS and other kernels pass through. Each new XMX setup keeps its own
-wrapper copy, so replacing the plugin does not change an existing launcher.
+On the legacy 20261005 runtime, the per-game CM compiler wrapper corrects
+the verified PRE kernel's descriptor-table metadata. Newer patched ANV drivers
+resolve the FSR sampler descriptor table themselves and use the runtime's
+compiler directly. For a game with an older managed XMX setup, turn XMX off
+and back on to generate a new launcher and compiler cache, then select FSR
+again.
 
 The validated profile is the exact model/Opti build with the 20261005 XMX runtime
 on SteamOS and Intel Arc B390. Other games, GPUs, ray tracing and frame-generation

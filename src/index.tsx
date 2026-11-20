@@ -11,8 +11,9 @@ type FsrStatus = { ready: boolean; version: string; reason: string };
 type GameFsrStatus = FsrStatus & { prepared: boolean; bridge_ready: boolean; opti_version: string };
 type Pending = { expected: string; target: string; kind: string };
 type Info = Game & { executables: string[]; libraries: { path: string; version: number[] | null }[];
-  optis: string[]; runtime_ready: boolean; prefix_ready: boolean; external_managed: boolean;
+  optis: string[]; runtime_ready: boolean; prefix_ready: boolean; prefix_issue?: string; external_managed: boolean;
   automatic: { executable: string; route: string; reason: string; candidates: string[] }; state: Setup | null;
+  launcher_skip_update?: { expected: string; target: string };
   fsr?: GameFsrStatus;
   opti?: { managed: boolean; installed: boolean; incomplete?: boolean; injection_enabled: boolean; version: string; status: string; rollback: boolean; pending?: Pending; settings_rollback?: boolean; settings_recovery?: boolean; settings: Settings } };
 type Registration = { unregister(): void };
@@ -105,8 +106,10 @@ const inventory = callable<[], Reply<Game[]>>('inventory');
 const inspect = callable<[number], Reply<Info>>('inspect_game');
 const enable = callable<[number, string, string, string], Reply<Setup>>('enable');
 const confirm = callable<[number, string], Reply<Setup>>('confirm_launch');
+const launcherSkip = callable<[number, string, boolean], Reply<{expected:string; target:string}>>('cyberpunk_launcher_skip');
 const restore = callable<[number, string], Reply<Setup>>('restore');
 const optiInstall = callable<[number, string, string, string, string], Reply<Pending>>('opti_install');
+const optiReinstall = callable<[number, string, string, string, string], Reply<Pending>>('opti_reinstall');
 const optiCacheStatus = callable<[], Reply<CacheStatus>>('opti_cache_status');
 const optiMigrate = callable<[number, string, string], Reply<Pending>>('opti_migrate');
 const optiRollback = callable<[number, string], Reply<Pending>>('opti_rollback');
@@ -149,7 +152,7 @@ async function writeLaunch(id: number, desired: string, expected: string): Promi
     const actual = await readLaunch(id);
     if (actual === desired) return actual;
   }
-  throw new Error(t('Steam 启动项写入尚未确认，请使用继续开启或恢复'));
+  throw new Error(t('Steam 启动项尚未确认，请使用「修复」。'));
 }
 async function finish(id: number, setup: Setup, restoring = false) {
   const before = await readLaunch(id);
@@ -165,8 +168,13 @@ async function applyPendingLaunch(id: number, before: string, next: Pending) {
   const actual = before === next.target ? before : await writeLaunch(id, next.target, before);
   unwrap(await optiConfirm(id, actual));
 }
+function prefixInitializationReason(info: Info): string {
+  return info.prefix_ready ? '' : info.prefix_issue || '请先从 Steam 用 Proton 启动游戏一次，退出后重新打开插件。';
+}
 async function saveFSRSettings(id: number, desired: Settings, source: DownloadSource, manual: string) {
   let currentInfo = unwrap(await inspect(id));
+  const prefixReason = prefixInitializationReason(currentInfo);
+  if (prefixReason) throw new Error(t(prefixReason));
   let launch = await readLaunch(id);
   if (currentInfo.state?.status === 'active' && launch === '') {
     await finish(id, currentInfo.state);
@@ -196,7 +204,7 @@ async function saveFSRSettings(id: number, desired: Settings, source: DownloadSo
     const exe = executable();
     if (!exe) throw new Error(t('请先选择要运行的游戏程序。'));
     const setup = unwrap(await enable(id, exe, currentInfo.automatic.route, launch));
-    if (!['active','pending_launch'].includes(setup.status)) throw new Error(t('上次设置未完成，请先点击恢复。'));
+    if (!['active','pending_launch'].includes(setup.status)) throw new Error(t('上次设置未完成，请点击「修复」。'));
     await finish(id, setup);
     currentInfo = unwrap(await inspect(id)); launch = await readLaunch(id);
     xmxActive = currentInfo.state?.status === 'active' && launch === currentInfo.state.launch;
@@ -264,7 +272,7 @@ function selectedExecutable(info: Info) {
   const manual = selection.executables[info.appid] || '';
   return info.automatic.executable || (info.executables.includes(manual) && info.automatic.candidates.includes(manual) ? manual : '');
 }
-type OptiAction = 'install' | 'migrate' | 'rollback' | 'uninstall' | 'finish';
+type OptiAction = 'install' | 'reinstall' | 'migrate' | 'rollback' | 'uninstall' | 'finish';
 async function runOptiAction(id: number, kind: OptiAction, version: string) {
   if (selection.appid !== id || selection.actionBusy || selection.settingsSave?.saving) return;
   cancelMultiplier();
@@ -276,8 +284,8 @@ async function runOptiAction(id: number, kind: OptiAction, version: string) {
     let data = unwrap(await inspect(id));
     let launch = await readLaunch(id);
     const exe = selectedExecutable(data);
-    if ((kind === 'install' || kind === 'migrate') && !exe) throw new Error(t('请先选择要运行的游戏程序。'));
-    if (kind === 'install' && source === 'local') {
+    if ((kind === 'install' || kind === 'reinstall' || kind === 'migrate') && !exe) throw new Error(t('请先选择要运行的游戏程序。'));
+    if ((kind === 'install' || kind === 'reinstall') && source === 'local') {
       const cache = unwrap(await optiCacheStatus());
       updateSelection({...selection,cache});
       if (!cache[version]?.cached) throw new Error(t('本地安装包不存在，请重新选择安装来源。'));
@@ -285,7 +293,7 @@ async function runOptiAction(id: number, kind: OptiAction, version: string) {
     const wasActive = data.state?.status === 'active';
     if (wasActive && launch !== data.state?.launch)
       throw new Error(t('启动项已被其他工具修改，请检查后再试。'));
-    if (kind === 'install' && wasActive) {
+    if ((kind === 'install' || kind === 'reinstall') && wasActive) {
       updateSelection({...selection,settingsSave:{appid:id,saving:true,error:false,message:'正在临时关闭 XMX，以安装 Opti…'}});
       await finish(id, unwrap(await restore(id, launch)), true);
       restoredXmx = true;
@@ -294,6 +302,7 @@ async function runOptiAction(id: number, kind: OptiAction, version: string) {
     const fsrReprepare = version === data.fsr?.opti_version && data.fsr.prepared && data.fsr.ready;
     const next = kind === 'install' ? fsrReprepare
       ? unwrap(await fsrPrepare(id, exe, launch, source)) : unwrap(await optiInstall(id, exe, launch, version, source))
+      : kind === 'reinstall' ? unwrap(await optiReinstall(id, exe, launch, version, source))
       : kind === 'migrate' ? unwrap(await optiMigrate(id, exe, launch))
       : kind === 'rollback' ? unwrap(await optiRollback(id, launch))
       : kind === 'uninstall' ? unwrap(await optiUninstall(id, launch)) : data.opti?.pending;
@@ -305,7 +314,7 @@ async function runOptiAction(id: number, kind: OptiAction, version: string) {
       const freshExe = selectedExecutable(data);
       if (!freshExe) throw new Error(t('请先选择要运行的游戏程序。'));
       const setup = unwrap(await enable(id, freshExe, data.automatic.route, launch));
-      if (!['active','pending_launch'].includes(setup.status)) throw new Error(t('上次设置未完成，请先点击恢复。'));
+      if (!['active','pending_launch'].includes(setup.status)) throw new Error(t('上次设置未完成，请点击「修复」。'));
       await finish(id, setup);
     }
   } catch (error) {
@@ -481,23 +490,27 @@ function Content() {
   const needsChoice = !!info && !info.automatic.executable && info.automatic.candidates.length > 1;
   const reason = needsChoice && validManualExe && info?.automatic.reason === '发现多个游戏程序，请在下面确认一次。'
     ? '' : info?.automatic.reason || '';
-  const blocked = !managed && (!!reason || !executable);
-  async function toggle(want: boolean) {
-    if (!info) return;
+  const prefixReason = info ? prefixInitializationReason(info) : '';
+  const blocked = (!active && !!prefixReason) || (!managed && (!!reason || !executable));
+  async function toggle(want: boolean, repairing = false) {
+    if (!info || (want && prefixReason)) return;
     const id = info.appid;
     await task(want ? t('正在开启 XMX，请稍候…') : t('正在关闭 XMX，恢复原配置…'), async () => {
+      let refreshed: Info;
       try {
         const before = await readLaunch(id);
         if (want) {
           const setup = managed ? state! : unwrap(await enable(id, executable, info.automatic.route, before));
-          if (!['active', 'pending_launch'].includes(setup.status)) throw new Error(t('上次设置未完成，请先点击恢复。'));
+          if (!['active', 'pending_launch'].includes(setup.status)) throw new Error(t('上次设置未完成，请点击「修复」。'));
           await finish(id, setup);
         } else {
           await finish(id, unwrap(await restore(id, before)), true);
         }
-        setMessage(want ? t('已开启。直接从 Steam 启动游戏即可。') : t('已关闭，原文件和启动项已恢复。'));
-        toaster.toast({ title: 'Opti2XMX', body: want ? t('XMX 已开启') : t('XMX 已关闭') });
-      } finally { await load(id); }
+      } finally { refreshed = await load(id); }
+      const repairNotice = repairing ? t(!refreshed.prefix_ready && !refreshed.prefix_issue
+        ? '修复完成。请从 Steam 启动一次游戏，退出后再开启 XMX。' : '修复完成。已恢复原配置。') : '';
+      setMessage(repairNotice || t(want ? '已开启。直接从 Steam 启动游戏即可。' : '已关闭，原文件和启动项已恢复。'));
+      toaster.toast({ title: 'Opti2XMX', body: repairNotice || t(want ? 'XMX 已开启' : 'XMX 已关闭') });
     });
   }
   const opti = info?.opti;
@@ -513,8 +526,7 @@ function Content() {
   const fsrReason = gameFsr?.reason || fsr?.reason || '请导入本地 FSR 模型包。';
   const selectedSR = settings.sr;
   const migrateOpti = !!opti?.installed && !opti.incomplete;
-  const installReason = !info?.prefix_ready ? '请先从 Steam 用 Proton 启动游戏一次，退出后重新打开插件。'
-    : !executable ? '请先选择要运行的游戏程序。' : '';
+  const installReason = prefixReason || (!executable ? '请先选择要运行的游戏程序。' : '');
   const optiPending = !!opti?.pending;
   const configBlocked = optiPending || !!opti?.settings_recovery;
   const overlayReason = !opti?.installed ? '请先为此游戏安装 Opti。'
@@ -534,6 +546,13 @@ function Content() {
     });
   }
   function optiAction(kind: OptiAction) { return runOptiAction(appid, kind, version); }
+  function restoreOptiSettings() {
+    return task(t('正在撤销上次设置…'), async () => {
+      unwrap(await optiRestoreSettings(appid));
+      await load(appid);
+      setMessage(t('已恢复上次保存前的设置，下次启动生效。'));
+    });
+  }
   async function importFSRModel() {
     await task(t('正在选择 FSR 模型包…'), async () => {
       const picked = await openFilePicker(FileSelectionType.FILE, '/home/deck/Downloads', true, false, undefined, ['zip']);
@@ -579,16 +598,40 @@ function Content() {
           if (appid) await load(appid);
         }
       })}>{t('下载并配置 XMX 运行环境')}</ButtonItem>;
-  const recoveryControls = <>
-    {optiPending && <ButtonItem layout="below" disabled={busy || opti?.status==='recovery_required'} onClick={()=>optiAction('finish')}>{t('完成 Opti 启动设置')}</ButtonItem>}
-    {pending && state?.status === 'pending_launch' && <ButtonItem layout="below" disabled={busy} onClick={() => toggle(true)}>{t('继续开启')}</ButtonItem>}
-    {managed && (!active || pending) && <ButtonItem layout="below" disabled={busy} onClick={() => toggle(false)}>{t('恢复原配置')}</ButtonItem>}
-    {opti?.rollback && (optiPending || !executable) && <ButtonItem layout="below"
-      disabled={busy || managed || !!opti.settings_recovery} description={t('撤销未完成的 Opti 操作，保留原文件和回退记录。')}
-      onClick={()=>optiAction('rollback')}>{t('回退上次操作')}</ButtonItem>}
-    {!executable && opti?.settings_recovery && <ButtonItem layout="below" disabled={busy || optiPending}
-      onClick={()=>task(t('正在撤销上次设置…'),async()=>{unwrap(await optiRestoreSettings(appid));await load(appid);})}>{t('恢复中断的设置')}</ButtonItem>}
-  </>;
+  async function updateLauncherSkip() {
+    const id = appid;
+    await task(t('正在更新赛博朋克启动项…'), async () => {
+      try {
+        const before = await readLaunch(id);
+        const plan = unwrap(await launcherSkip(id, before, false));
+        const actual = before === plan.target ? before : await writeLaunch(id, plan.target, before);
+        unwrap(await launcherSkip(id, actual, true));
+        setMessage(t('已更新赛博朋克启动项，跳过启动器。'));
+      } finally { await load(id); }
+    });
+  }
+  let repair: { description: string; disabled?: boolean; run: () => void } | undefined;
+  if (opti?.settings_recovery) {
+    repair = {description:'恢复中断的 Opti 设置。', disabled:optiPending || pending, run:restoreOptiSettings};
+  } else if (info?.launcher_skip_update && [info.launcher_skip_update.expected, info.launcher_skip_update.target].includes(actualLaunch) && !optiPending && !pending) {
+    repair = {description:'更新赛博朋克启动项以跳过启动器，保留 XMX 和 Opti 配置。', run:updateLauncherSkip};
+  } else if (managed && !active) {
+    repair = {description:'恢复此游戏的 XMX 配置和 Steam 启动项。', run:()=>toggle(false, true)};
+  } else if (optiPending) {
+    if (opti?.status === 'pending_launch')
+      repair = {description:'完成尚未确认的 Opti 启动设置。', run:()=>optiAction('finish')};
+    else if (opti?.rollback)
+      repair = {description:'回退中断的 Opti 操作。', disabled:managed, run:()=>optiAction('rollback')};
+  } else if (executable && opti?.installed && !opti.managed) {
+    repair = {description:installReason || (opti.incomplete
+      ? '补齐缺少的 Opti 文件。先退出游戏。' : '重装 Opti 并重置设置。先退出游戏。'),
+      disabled:!!installReason, run:()=>optiAction(opti.incomplete ? 'install' : 'reinstall')};
+  } else if (opti?.rollback && (advanced || !executable)) {
+    repair = {description:managed ? '关闭 XMX 后可回退上次 Opti 操作。' : '回退上次 Opti 操作。',
+      disabled:managed, run:()=>optiAction('rollback')};
+  }
+  const repairControl = repair && <ButtonItem layout="below" disabled={busy || !!repair.disabled}
+    description={t(repair.description)} onClick={repair.run}>{t('修复')}</ButtonItem>;
   return <PanelSection>
     {progressDisconnected && <PanelSectionRow><div role="status">{t('进度连接暂不可用，正在重试。')}</div></PanelSectionRow>}
     <DropdownItem label={t('游戏')} layout="below" disabled={busy} selectedOption={appid} strDefaultLabel={t('选择游戏')}
@@ -607,16 +650,17 @@ function Content() {
           updateSelection({...selection, executables:{...selection.executables,[id]:value}});
           if (mounted.current) setManualExe(value);
         }} />}
-      {!!executable && <>
-      {opti && !opti.managed && !optiPending && <>
-        {!migrateOpti && versionControls}
-        <ButtonItem layout="below" disabled={busy || !!installReason || configBlocked || pending}
+      {!!executable && opti && !opti.managed && !optiPending && <>
+        {versionControls}
+        {!opti.incomplete && <ButtonItem layout="below" disabled={busy || !!installReason || configBlocked || pending}
           description={migrateOpti ? t('保留现有文件并建立回退备份。') : installDescription}
-          onClick={()=>optiAction(migrateOpti?'migrate':'install')}>{migrateOpti?t('迁移现有 Opti')
-            : opti.incomplete?t('修复并安装所选版本'):t('安装所选版本')}</ButtonItem>
+          onClick={()=>optiAction(migrateOpti?'migrate':'install')}>{migrateOpti?t('迁移现有 Opti'):t('安装所选版本')}</ButtonItem>}
       </>}
-      <ToggleField label={t('XMX 加速')} checked={active} disabled={busy || blocked || pending || configBlocked}
-        description={t(blocked ? reason || '请先选择要运行的游戏程序。' : '仅限 Intel；更改前请退出游戏。')} onChange={want => void toggle(want)} />
+      {repairControl}
+      {!!executable && <>
+      <ToggleField label={t('XMX 加速')} checked={active} disabled={busy || blocked || (pending && state?.status !== 'pending_launch') || configBlocked}
+        description={t(blocked ? prefixReason || reason || '请先选择要运行的游戏程序。'
+          : state?.status === 'pending_launch' ? '打开开关可继续开启 XMX。' : '仅限 Intel；更改前请退出游戏。')} onChange={want => void toggle(want)} />
       {opti?.managed && <ToggleField label={t('Opti 注入')} checked={opti.injection_enabled} disabled={busy || pending || configBlocked}
         description={t('原生 XeSS 帧生成请关闭。')}
         onChange={want => void toggleOpti(want)} />}
@@ -664,21 +708,18 @@ function Content() {
               rgOptions={options([['real',t('真实显卡（推荐）')],['nvidia','NVIDIA'],['amd','AMD'],['intel','Intel Arc']])}
               onChange={v=>void saveSettingsPatch(appid,{spoof:String(v.data)})} />
             <ButtonItem layout="below" disabled={busy || optiPending || !!opti.settings_recovery} description={t('恢复 XeSS、真实显卡、由游戏管理帧生成；先退出游戏。')} onClick={()=>void saveSettingsPatch(appid,{},true)}>{t('恢复默认')}</ButtonItem>
-            {(opti.settings_rollback || opti.settings_recovery) && <ButtonItem layout="below" disabled={busy || optiPending}
+            {opti.settings_rollback && !opti.settings_recovery && <ButtonItem layout="below" disabled={busy || optiPending}
               description={t('恢复上次保存前的配置；保留安装回退记录。先退出游戏。')}
-              onClick={()=>task(t('正在撤销上次设置…'),async()=>{unwrap(await optiRestoreSettings(appid));await load(appid);setMessage(t('已恢复上次保存前的设置，下次启动生效。'));})}>
-              {opti.settings_recovery?t('恢复中断的设置'):t('撤销上次设置')}</ButtonItem>}
+              onClick={restoreOptiSettings}>{t('撤销上次设置')}</ButtonItem>}
           </>}
           {opti.managed && <>{versionControls}
             <ButtonItem layout="below" disabled={busy || pending || configBlocked || !opti.injection_enabled || !!installReason}
               description={installDescription} onClick={()=>optiAction('install')}>{t('安装所选版本')}</ButtonItem>
           </>}
-          {!optiPending && <ButtonItem layout="below" disabled={busy || managed || !!opti.settings_recovery || !opti.rollback} description={t('撤销上次安装、迁移或卸载；需先关闭 XMX。')} onClick={()=>optiAction('rollback')}>{t('回退上次操作')}</ButtonItem>}
           <ButtonItem layout="below" disabled={busy || managed || configBlocked || !opti.managed} description={t('卸载本插件管理的 Opti 文件并恢复原文件；需先关闭 XMX。')} onClick={()=>removeConfirm ? optiAction('uninstall') : setRemoveConfirm(true)}>{removeConfirm?t('确认卸载 Opti'):t('卸载 Opti')}</ButtonItem>
         </>}
       </>}
       </>}
-      {recoveryControls}
       {visibleMessage && <PanelSectionRow><div role={visibleError ? 'alert' : 'status'} style={{fontSize:13,lineHeight:1.5}}>{t(visibleMessage)}</div></PanelSectionRow>}
     </> : <>{runtimeControl}<PanelSectionRow><div role="status" style={{fontSize:13,lineHeight:1.5}}>{t(visibleMessage)}</div></PanelSectionRow></>}
     {operation?.operation_id && (operation.appid === appid || operation.running || operation.kind === 'runtime_install') && <PanelSectionRow>

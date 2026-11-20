@@ -40,6 +40,7 @@ class FsrTests(Tests):
             for name, data in files.items():out.writestr(name, data)
         self.pin = dict(schema=1, version='4.1.2-lite-xmx-0.6', sha256=fsr.digest(self.archive),
                         size_bytes=self.archive.stat().st_size, opti_version='10.0.0-pre1_20261025',
+                        opti_archive=fsr.descriptor()['opti_archive'],
                         patched_upscaler_sha256=hashlib.sha256(fsr.patch_decompressor_import(pe_fixture())).hexdigest(),
                         files={name:dict(size_bytes=len(data),sha256=hashlib.sha256(data).hexdigest()) for name,data in files.items()})
         self.pin_patch = patch.object(fsr, 'descriptor', return_value=self.pin)
@@ -110,6 +111,30 @@ class FsrTests(Tests):
         self.m.confirm_launch(42, old)
         self.assertEqual(self.m.inspect_game(42)['opti']['settings']['sr'], 'xess')
         self.assertFalse(self.m.inspect_game(42)['opti']['settings_rollback'])
+
+    def test_modern_bridge_retains_the_runtime_compiler_and_dll_setup(self):
+        rt = self.m.runtime()
+        state = self.home / 'modern-setup'
+        config = state / 'xmx/game.conf'
+        config.parent.mkdir(parents=True)
+        package = self.home / 'modern-runtime'
+        for name in rt.MODERN_REQUIRED:
+            path = package / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'runtime fixture')
+        (package / 'lib/active').write_text('26.3.1')
+        compiler = 'export ANV_CM_HELPER=' + str(package / 'tools/cm-compile.sh')
+        config.write_text(compiler + '\n')
+
+        self.m.fsr_install_bridge(state, package)
+
+        text = config.read_text()
+        self.assertEqual([line for line in text.splitlines() if 'ANV_CM_HELPER=' in line], [compiler])
+        self.assertFalse((state / 'fsr-compile.sh').exists())
+        self.assertFalse((state / 'fsr_cm.py').exists())
+        self.assertIn('fsrxdec', text)
+        self.assertIn('libwim-15', text)
+        self.assertIn('export FSR4_XMX_NO_DIALOG=1', text)
 
     def test_version_reinstall_resets_old_v10_fsr_selection_and_keeps_menu(self):
         old = self.prepare_fsr()

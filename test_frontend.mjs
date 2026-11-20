@@ -115,11 +115,18 @@ assert.equal(toggle().checked,false,'an empty Steam entry reports the saved XMX 
 toggle().onChange(true);await settle();
 assert.equal(current,info.state.launch,'reenabling restores the existing recorded XMX launcher');
 assert.equal(enableCalls,enableCallsBeforeRecovery,'recovery reuses the old journal instead of creating another setup');
+info.state.status='pending_launch';await reopenUI();
+assert.equal(toggle().disabled,false,'pending XMX can finish through its normal switch');
+assertOneRepair();
+toggle().onChange(true);await settle();
+assert.equal(info.state.status,'active');
+assert.equal(enableCalls,enableCallsBeforeRecovery);
 current='';await reopenUI();
-assert.ok(button('恢复原配置'));
-button('恢复原配置').onClick();await settle();
+assert.ok(button('修复'));
+button('修复').onClick();await settle();
 assert.equal(current,'%command%','restoring from an empty Steam entry reinstates the non-empty original options');
 assert.equal(info.state.status,'restored');
+assert.equal(notifications.at(-1).body,'修复完成。已恢复原配置。');
 console.log('PASS: automatic selection; toggle on/off; immediate progress; double-click guard; visible errors/toasts; Steam readback and conflict protection.');
 
 current='';rejectEnable=false;
@@ -140,6 +147,13 @@ methods.opti_confirm=async(_id,actual)=>{
   return {ok:true,data:true};
 };
 function button(label){return nodes(render()).find(n=>n.type==='button'&&n.props.children===label)?.props;}
+function pendingOptiRepair(){
+  const repair=button('修复');
+  return repair?.description==='完成尚未确认的 Opti 启动设置。' ? repair : undefined;
+}
+function assertOneRepair(){
+  assert.equal(nodes(render()).filter(n=>n.type==='button'&&n.props.children==='修复').length,1);
+}
 info.runtime_ready=false;info.automatic.reason='XMX 运行组件未就绪。';
 await reopenUI();
 assert.equal(toggle().disabled,true);assert.equal(button('安装所选版本').disabled,false,'Opti install stays available without the XMX runtime');
@@ -161,7 +175,7 @@ assert.ok(button('收起高级设置'),'advanced settings should be open by defa
 assert.ok(nodes(render()).some(n=>n.type==='slider' && n.props.label.startsWith('插帧倍率')),'FG multiplier must use a slider');
 assert.equal(nodes(render()).find(n=>n.props?.label==='超分输出').props.description,undefined,'upscaling has no always-visible save hint');
 assert.equal(nodes(render()).find(n=>n.type==='slider' && n.props.label.startsWith('插帧倍率')).props.description,undefined,'slider has no always-visible save hint');
-assert.ok(button('卸载 Opti'));assert.ok(button('回退上次操作'));
+assert.ok(button('卸载 Opti'));assert.ok(button('修复'));
 const version=nodes(render()).find(n=>n.type==='select'&&n.props.label==='Opti 安装版本');
 assert.equal(version.props.selectedOption,'0.9.4');
 console.log('PASS: official 0.9.4 install action, Steam confirmation, panel button, advanced lifecycle controls.');
@@ -234,10 +248,10 @@ button('撤销上次设置').onClick();await settle();assert.equal(restoreSettin
 assert.equal(current,launchBeforeSettings);
 info.opti.settings_recovery=true;await reopenUI();
 assert.equal(multiplier().disabled,true);
-assert.equal(button('保存设置'),undefined);assert.equal(button('恢复默认').disabled,true);assert.ok(button('恢复中断的设置'));
+assert.equal(button('保存设置'),undefined);assert.equal(button('恢复默认').disabled,true);assert.ok(button('修复'));
 assert.equal(toggle().disabled,true);assert.equal(optiToggle().disabled,true);assert.equal(button('安装所选版本').disabled,true);
-assert.equal(button('恢复中断的设置').disabled,false);
-button('恢复中断的设置').onClick();await settle();assert.equal(restoreSettingsCalls,2);
+assert.equal(button('修复').disabled,false);
+button('修复').onClick();await settle();assert.equal(restoreSettingsCalls,2);
 runtime.ready=true;runtime.update_available=true;await reopenUI();
 assert.ok(button('下载并配置 XMX 运行环境'),'existing runtime offers explicit update');
 runtime.update_available=false;await reopenUI();
@@ -319,23 +333,23 @@ info.opti.pending=null;info.opti.status='active';
 operation={...operation,phase:'completed',revision:2};
 for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
 methods.inspect_game=inspectOriginal;releaseInspect();await pendingReopen;
-assert.ok(button('完成 Opti 启动设置'),'fixture loads stale pending info before deferred refresh');
+assert.ok(pendingOptiRepair(),'fixture loads stale pending info before deferred refresh');
 for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
-assert.equal(button('完成 Opti 启动设置'),undefined,'completed confirmation must refresh after local lock releases');
+assert.equal(pendingOptiRepair(),undefined,'completed confirmation must refresh after local lock releases');
 // A failed terminal refresh is retried on the next snapshot without repeating a mutation.
 operation={...operation,phase:'awaiting-launch',revision:3};
 info.opti.pending={expected:current,target:current,kind:'install'};info.opti.status='pending_launch';
 for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
 await reopenUI();
-assert.ok(button('完成 Opti 启动设置'));
+assert.ok(pendingOptiRepair());
 info.opti.pending=null;info.opti.status='active';
 let refreshFailures=1;
 methods.inspect_game=async id=>{if(refreshFailures-- > 0)throw new Error('temporary inspect failure');return inspectOriginal(id);};
 operation={...operation,phase:'completed',revision:4};
 for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
-assert.ok(button('完成 Opti 启动设置'),'failed read retains pending UI until a successful refresh');
+assert.ok(pendingOptiRepair(),'failed read retains pending UI until a successful refresh');
 for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
-assert.equal(button('完成 Opti 启动设置'),undefined,'terminal refresh retries after a transient read failure');
+assert.equal(pendingOptiRepair(),undefined,'terminal refresh retries after a transient read failure');
 methods.inspect_game=inspectOriginal;
 // A stuck read-only RPC times out, retains the last running snapshot, and cannot apply a late reply.
 operation={...operation,operation_id:'reconnect',phase:'downloading',running:true,downloaded_bytes:4194304,revision:5};
@@ -406,6 +420,47 @@ assert.ok(choice);assert.match(choice.props.description,/必选/);
 choice.props.onChange({data:'Control_DX12.exe'});
 assert.equal(button('安装所选版本').disabled,true,'manual EXE cannot bypass missing prefix');
 assert.match(textOf(button('安装所选版本').description),/Proton/);
+assert.equal(toggle().disabled,true,'partial Proton prefix blocks XMX');
+assert.match(toggle().description,/先从 Steam 用 Proton 启动游戏/);
+const enableCountBeforeUnready = enableCalls;
+toggle().onChange(true);
+await settle();
+assert.equal(enableCalls,enableCountBeforeUnready);
+const withoutPrefix = info.automatic;
+info.state={status:'recovery_required',executable:'Control_DX12.exe',old_launch:current};
+info.automatic={...withoutPrefix,executable:'Control_DX12.exe',reason:''};
+await reopenUI();
+assert.equal(toggle().disabled,true,'old failed transaction cannot restart XMX');
+assert.match(toggle().description,/先从 Steam 用 Proton 启动游戏/);
+assert.equal(button('修复').disabled,false,'recovery remains available');
+assertOneRepair();
+assert.match(button('修复').description,/恢复此游戏的 XMX 配置/);
+const restoreBeforeIncompletePrefix = methods.restore;
+const confirmBeforeIncompletePrefix = methods.confirm_launch;
+let incompleteRestores=0,incompleteConfirms=0;
+methods.restore=async(id,actual)=>{
+  assert.equal(id,42);assert.equal(actual,current);incompleteRestores++;
+  info.state.status='pending_restore_launch';
+  return {ok:true,data:copy(info.state)};
+};
+methods.confirm_launch=async(id,actual)=>{
+  assert.equal(id,42);assert.equal(actual,current);incompleteConfirms++;
+  info.state.status='restored';
+  return {ok:true,data:copy(info.state)};
+};
+button('修复').onClick();await settle();
+assert.equal(incompleteRestores,1);
+assert.equal(incompleteConfirms,1);
+assert.equal(info.state.status,'restored');
+const firstLaunchNotice = '修复完成。请从 Steam 启动一次游戏，退出后再开启 XMX。';
+assert.ok(nodes(render()).some(n=>n.props?.role==='status' && textOf(n).includes(firstLaunchNotice)));
+assert.equal(notifications.at(-1).body,firstLaunchNotice);
+assert.equal(enableCalls,enableCountBeforeUnready);
+methods.restore=restoreBeforeIncompletePrefix;
+methods.confirm_launch=confirmBeforeIncompletePrefix;
+info.state=null;
+info.automatic=withoutPrefix;
+
 info.prefix_ready=true;info.automatic.reason='尚未发现 XeSS。请先为此游戏安装 OptiScaler 并运行一次，然后重新打开插件。';
 await reopenUI();
 nodes(render()).find(n=>n.props?.label==='确认游戏程序').props.onChange({data:'Control_DX12.exe'});
@@ -416,18 +471,18 @@ info.executables=['ds.exe'];
 info.opti={...info.opti,installed:true,incomplete:true};
 await reopenUI();
 assert.equal(button('迁移现有 Opti'),undefined);assert.equal(button('打开 / 关闭 Opti 覆盖层'),undefined);
-assert.equal(button('修复并安装所选版本').disabled,false);
-assert.match(textOf(button('修复并安装所选版本').description),/回退备份/);
+assert.equal(button('修复').disabled,false);
+assert.match(textOf(button('修复').description),/补齐缺少的 Opti 文件/);
 let repairCalls=0;
 methods.opti_install=async(id,exe)=>{assert.equal(id,42);assert.equal(exe,'ds.exe');repairCalls++;return {ok:false,error:'fixture repair rejected before mutation'};};
-button('修复并安装所选版本').onClick();await settle();assert.equal(repairCalls,1);
+button('修复').onClick();await settle();assert.equal(repairCalls,1);
 info.state={status:'failed',old_launch:''};info.automatic.reason='';
 await reopenUI();
-assert.equal(button('修复并安装所选版本').disabled,false,'failed XMX journal cannot block installation');
+assert.equal(button('修复').disabled,false,'failed XMX journal cannot block installation');
 assert.equal(toggle().disabled,false);
 context.document.documentElement.lang='en';
-assert.equal(button('Repair with the selected version').disabled,false);
-assert.match(textOf(button('Repair with the selected version').description),/rollback backups/);
+assert.equal(button('Repair').disabled,false);
+assert.match(textOf(button('Repair').description),/Install the missing Opti files/);
 for(const cleanup of cleanups)cleanup();
 console.log('PASS: Control prerequisites and executable selection, visible XMX reasons, incomplete Death Stranding repair, failed journal and English copy.');
 
@@ -950,10 +1005,10 @@ assert.deepEqual(failedInstallCalls,['restore','confirm_restore','install_failed
 assert.equal(info.state.status,'restored','failed install leaves XMX off for explicit recovery');
 assert.match(textOf(render()),/安装流程未完成.*fixture failed after staging files/);
 assert.equal(button('安装所选版本'),undefined);assert.equal(button(overlayLabel),undefined);
-assert.ok(button('完成 Opti 启动设置'),'pending recovery remains visible outside the ambiguous EXE gate');
-assert.equal(button('完成 Opti 启动设置').disabled,true,'unrecoverable pending install cannot be falsely confirmed');
-assert.ok(button('回退上次操作'),'rollback remains visible outside the ambiguous EXE gate');
-assert.equal(button('回退上次操作').disabled,false,'rollback remains actionable outside the ambiguous EXE gate');
+assert.equal(pendingOptiRepair(),undefined,'partial installation is not eligible for confirmation');
+assertOneRepair();
+assert.match(button('修复').description,/回退中断的 Opti 操作/);
+assert.equal(button('修复').disabled,false,'rollback remains actionable outside the ambiguous EXE gate');
 await reopenUI();for(const timer of timers.values())timer();await new Promise(resolve=>setTimeout(resolve,20));
 assert.equal(partialInstallCount,1,'failed partial installation is never retried by mount or polling');
 let rollbackCalls=0,rollbackConfirms=0;
@@ -967,9 +1022,9 @@ methods.opti_confirm=async(id,actual)=>{
   info.opti={...info.opti,managed:false,installed:false,incomplete:false,status:'',pending:null,rollback:false};
   return {ok:true,data:true};
 };
-button('回退上次操作').onClick();await settle();
+button('修复').onClick();await settle();
 assert.equal(rollbackCalls,1);assert.equal(rollbackConfirms,1);assert.equal(current,'rollback-original %command%');
-assert.equal(info.opti.pending,null);assert.equal(button('完成 Opti 启动设置'),undefined);
+assert.equal(info.opti.pending,null);assert.equal(pendingOptiRepair(),undefined);
 assert.equal(api.selectionSnapshot().settingsSave.error,false,'successful explicit rollback replaces the installation error');
 clearUI();
 console.log('PASS: partial install failure leaves actionable rollback outside EXE gating, never retries, and rollback writes and confirms Steam launch settings.');
@@ -985,11 +1040,47 @@ methods.opti_confirm=async(id,actual)=>{
   info.opti={...info.opti,status:'active',pending:null};return {ok:true,data:true};
 };
 await mountUI();
-assert.ok(button('完成 Opti 启动设置'),'confirmable pending install remains visible without an EXE selection');
-assert.equal(button('完成 Opti 启动设置').disabled,false);
+assert.ok(pendingOptiRepair(),'confirmable pending install remains visible without an EXE selection');
+assert.equal(pendingOptiRepair().disabled,false);
 assert.equal(button('安装所选版本'),undefined,'recovery does not expose new configuration prematurely');
-button('完成 Opti 启动设置').onClick();await settle();
+pendingOptiRepair().onClick();await settle();
 assert.equal(pendingFinishConfirms,1);assert.equal(current,'pending-completed %command%');
-assert.equal(info.opti.pending,null);assert.equal(button('完成 Opti 启动设置'),undefined);
+assert.equal(info.opti.pending,null);assert.equal(pendingOptiRepair(),undefined);
 clearUI();
 console.log('PASS: pending launch completion remains available without an unambiguous EXE and confirms Steam readback once.');
+resetInstallFixture();current='';
+info.opti={...copy(readyOverlay),managed:false,installed:true,version:'10.0.0-pre1_20261025',status:'',rollback:false,pending:null};
+let reinstallCalls=0;
+methods.opti_reinstall=async(id,exe,before,version,source)=>{
+  assert.equal(id,42);assert.equal(exe,'game.exe');assert.equal(before,'');
+  assert.equal(version,'10.0.0-pre1_20261025');assert.ok(source);
+  reinstallCalls++;info.opti={...info.opti,managed:true,status:'pending_launch',pending:{expected:before,target:'/reinstall/launch %command%',kind:'install'}};
+  return {ok:true,data:copy(info.opti.pending)};
+};
+methods.opti_confirm=async(id,actual)=>{assert.equal(id,42);assert.equal(actual,'/reinstall/launch %command%');info.opti={...info.opti,status:'active',pending:null};return {ok:true,data:true};};
+await mountUI();assert.equal(reinstallCalls,0);assert.ok(button('迁移现有 Opti'));assertOneRepair();
+assert.match(button('修复').description,/重装 Opti 并重置设置/);
+button('修复').onClick();await settle();
+assert.equal(reinstallCalls,1);assert.equal(current,'/reinstall/launch %command%');clearUI();
+console.log('PASS: one explicit Repair click reinstalls the selected Opti version and commits the actual launch option.');
+
+// A legacy Cyberpunk setup is updated only by the explicit repair action.
+resetInstallFixture();
+savedSelection='1091500';
+const skipLegacy='/managed/launch.sh %command%', skipTarget=skipLegacy+' --launcher-skip';
+info.appid=1091500;info.name='Cyberpunk';info.state={status:'active',launch:skipLegacy,old_launch:'original'};
+info.launcher_skip_update={expected:skipLegacy,target:skipTarget};current=skipLegacy;
+methods.inventory=async()=>({ok:true,data:[{appid:1091500,name:'Cyberpunk'}]});
+let skipCalls=[];
+methods.cyberpunk_launcher_skip=async(id,actual,commit)=>{
+  assert.equal(id,1091500);skipCalls.push([actual,commit]);
+  if(commit){assert.equal(actual,skipTarget);info.state.launch=skipTarget;delete info.launcher_skip_update;}
+  return {ok:true,data:{expected:skipLegacy,target:skipTarget}};
+};
+await mountUI();
+assert.match(button('修复').description,/跳过启动器/);
+button('修复').onClick();await settle();
+assert.equal(current,skipTarget);assert.deepEqual(skipCalls,[[skipLegacy,false],[skipTarget,true]]);
+assert.equal(info.state.old_launch,'original');assert.equal(info.state.status,'active');
+clearUI();
+console.log('PASS: explicit Cyberpunk launcher skip update preserves active setup.');

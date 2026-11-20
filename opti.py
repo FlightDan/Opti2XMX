@@ -15,6 +15,10 @@ import urllib.request
 import uuid
 from runtime_setup import download_ssl_context
 
+def managed_launch(appid, path):
+    return shlex.quote(str(path)) + ' %command%' + (' --launcher-skip' if appid == 1091500 else '')
+
+
 RELEASES = {
     '0.9.4': ('v0.9.4', 'Optiscaler_0.9.4-final.20260718._MM.7z', 481819753),
     '0.7.9': ('v0.7.9', 'OptiScaler_0.7.9.7z', 286094187),
@@ -82,6 +86,32 @@ def file_matches(path, pin):
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             checksum.update(chunk)
     return checksum.hexdigest() == pin['sha256']
+
+
+def reinstall_pins():
+    """Exact release members mapped to their installed paths."""
+    result = {}
+    for version in RELEASES:
+        for name, pin in archive_files(version, archive_pin(version)).items():
+            target = {'OptiScaler.dll': 'dxgi.dll', 'fakenvapi.dll': 'nvapi64.dll'}.get(name, name)
+            result.setdefault(target, []).append(pin)
+            if name == 'OptiScaler/libxess.dll':
+                result.setdefault('libxess.dll', []).append(pin)
+    from fsr import descriptor
+    model = descriptor()
+    for name, pin in model['files'].items():
+        result.setdefault('OptiScaler/' + name, []).append(pin)
+    pin = model['files']['amd_fidelityfx_upscaler_dx12.dll']
+    result['OptiScaler/amd_fidelityfx_upscaler_dx12.dll'].append(dict(size_bytes=pin['size_bytes'], sha256=model['patched_upscaler_sha256']))
+    result['OptiScaler/igdext64.dll'] = model['known_runtime_shims']
+    return result
+
+
+def pinned_core_version(path):
+    if path.is_symlink() or not path.is_file(): return ''
+    for version in RELEASES:
+        if file_matches(path, archive_files(version, archive_pin(version))['OptiScaler.dll']): return version
+    return ''
 
 
 def atomic_cache_bytes(path, data):
@@ -183,7 +213,7 @@ class OptiMixin:
         if sr == 'ffx' and get('FSR', 'UpscalerIndex', 'auto') == '9' and (r or {}).get('fsr_source_sha256'):
             sr = 'fsr_xmx'
         return dict(managed=bool(active), installed=bool(ini), incomplete=incomplete,
-                    version=r.get('version', '') if active else '',
+                    version=r.get('version', '') if active else (pinned_core_version(ini.parent / 'dxgi.dll') if ini and not incomplete else ''),
                     injection_enabled=r.get('injection_enabled', True) if active else bool(ini and not incomplete),
                     status=r.get('status', '') if r else '', rollback=bool(r and r.get('undo')),
                     pending=r.get('pending') if r else None,
@@ -325,12 +355,13 @@ class OptiMixin:
             if not allow_xmx or xmx['status'] != 'active': raise RuntimeError('请先关闭 XMX，再安装、回退或卸载 Opti')
             if actual != xmx['launch']:
                 if actual == '':
-                    raise RuntimeError('Steam 启动项为空，与活动的 XMX 记录不一致。请使用插件的“开启 XMX”或“恢复原配置”操作，再重试 Opti。')
+                    raise RuntimeError('Steam 启动项为空，与活动的 XMX 记录不一致。请使用插件里的 XMX 开关或「修复」，再重试 Opti。')
                 raise RuntimeError('Steam 启动项与 XMX 记录不一致')
         r = self.opti_record(appid)
         self.opti_require_settings_complete(r)
         if r and r.get('pending'): raise RuntimeError('上次操作待完成，请先完成启动项设置或回退')
         known = ['', '%command%', '~/fgmod/fgmod %command%', str(self.home/'fgmod/fgmod')+' %command%']
+        if appid == 1091500: known.append('%command% --launcher-skip')
         if r: known.append(r['launch'])
         if xmx: known.append(xmx.get('launch'))
         if actual not in known: raise RuntimeError('检测到自定义启动项，保留现场，请先处理冲突')
@@ -364,7 +395,7 @@ class OptiMixin:
             if value is not None: after.write_bytes(value)
             files.append(dict(path=name, before=str(before) if before.exists() else None,
                               after=str(after) if value is not None else None))
-        launch = shlex.quote(str(parent/'launch.sh'))+' %command%'
+        launch = managed_launch(appid, parent/'launch.sh')
         # Lifecycle revisions invalidate settings undo, including when that revision
         # is later rolled back. Installation undo remains a separate history.
         previous=copy.deepcopy(previous)
@@ -372,7 +403,7 @@ class OptiMixin:
         rollback_launch = previous['launch'] if previous and previous['status']=='active' else actual
         r = dict(appid=appid, executable=executable, version=version, status='applying',
                  injection_enabled=previous.get('injection_enabled', True) if previous and previous['status']=='active' else True,
-                 launch=launch, old_launch=previous['old_launch'] if previous else actual,
+                 launch=launch, old_launch=previous['old_launch'] if previous and kind != 'reinstall' else actual,
                  files=base, undo=dict(folder=str(folder),files=files,previous=previous,launch=rollback_launch),
                  pending=dict(expected=actual,target=launch,kind=kind))
         if kind == 'toggle' and previous and previous.get('fsr_source_sha256'):
@@ -389,7 +420,7 @@ class OptiMixin:
             r['status']='pending_launch';self.opti_save(appid,r)
         except Exception:
             r['status']='recovery_required';self.opti_save(appid,r)
-            raise RuntimeError('操作中断，备份已保存，请点击回退上次操作')
+            raise RuntimeError('操作中断，备份已保存。请点击「修复」。')
         return r['pending']
 
     def opti_install(self, appid, executable, actual, version, source):
@@ -402,7 +433,17 @@ class OptiMixin:
             self.progress.finish(identity, error=error)
             raise
 
-    def _opti_install(self, appid, executable, actual, version, source, operation_id, fsr=False):
+    def opti_reinstall(self, appid, executable, actual, version, source):
+        identity = self.progress.begin(appid, 'opti_reinstall', version)
+        try:
+            pending = self._opti_install(appid, executable, actual, version, source, identity, reinstall=True)
+            self.progress.finish(identity, phase='awaiting-launch')
+            return pending
+        except Exception as error:
+            self.progress.finish(identity, error=error)
+            raise
+
+    def _opti_install(self, appid, executable, actual, version, source, operation_id, fsr=False, reinstall=False):
         info, folder, prefix, r = self.opti_context(appid,executable,actual)
         if r and r['status']=='active' and not r.get('injection_enabled', True):
             raise RuntimeError('请先开启 Opti 注入，再更换版本')
@@ -419,13 +460,32 @@ class OptiMixin:
                 if (len(info['optis'])!=1 or Path(info['game'])/info['optis'][0]!=ini
                         or not ini.is_file() or ini.is_symlink()):
                     raise RuntimeError('已存在 Opti，请先迁移现有安装')
-        check_unmanaged_install()
+        if reinstall:
+            if r and r['status']=='active': raise RuntimeError('已管理的 Opti 请使用安装所选版本')
+            if len(info['optis']) != 1 or Path(info['game']) / info['optis'][0] != folder / 'OptiScaler.ini':
+                raise RuntimeError('请选择包含现有 OptiScaler.ini 的游戏程序')
+            self.runtime().no_symlink_parents(folder/'dxgi.dll')
+            previous_version = pinned_core_version(folder/'dxgi.dll')
+            if not previous_version:
+                raise RuntimeError('无法确认现有 Opti 核心归属：dxgi.dll')
+        else: check_unmanaged_install()
         payload=self.opti_package(version,source,operation_id=operation_id)
         self.progress.update(operation_id, 'installing')
         from manager import ini_set
         with self.runtime().prefix_lock(prefix):
             self.runtime().game_idle(prefix,Path(executable).name)
-            check_unmanaged_install()
+            if not reinstall:
+                check_unmanaged_install()
+            else:
+                current, current_folder, current_prefix, current_record = self.opti_context(appid,executable,actual)
+                if (current_folder, current_prefix, current_record, current['optis']) != (folder, prefix, r, info['optis']):
+                    raise RuntimeError('游戏或 Opti 状态已变化，请重新打开插件')
+                self.runtime().no_symlink_parents(folder/'dxgi.dll')
+                if pinned_core_version(folder/'dxgi.dll') != previous_version:
+                    raise RuntimeError('无法确认现有 Opti 核心归属：dxgi.dll')
+                ini=folder/'OptiScaler.ini'
+                self.runtime().no_symlink_parents(ini)
+                if ini.is_symlink() or not ini.is_file(): raise RuntimeError('无法确认现有配置：OptiScaler.ini')
             base=copy.deepcopy(r['files']) if r and r['status']=='active' else []
             self.opti_check_files(base)
             changes={}
@@ -439,7 +499,7 @@ class OptiMixin:
                 if name=='OptiScaler.ini':
                     text=data.decode('utf-8-sig')
                     # Carry shared SR/menu preferences, never transfer old FG schema blindly.
-                    old=ini_values(target) if target.exists() else configparser.ConfigParser()
+                    old=ini_values(target) if target.exists() and not reinstall else configparser.ConfigParser()
                     for section,key,default in [('Upscalers','Dx12Upscaler','xess'),('Menu','Scale','auto'),('Menu','ShortcutKey','auto')]:
                         text=ini_set(text,section,key,old.get(section,key,fallback=default))
                     from fsr import neutral_fsr
@@ -461,14 +521,58 @@ class OptiMixin:
                 changes.update(self.fsr_changes(folder))
             if version.startswith('10.') and any(f['path'] == str(folder/'nvapi64.dll') for f in base):
                 changes[str(folder/'nvapi64.dll')] = None
-            base=self.opti_baseline(appid,base,changes)
+            originals = None
+            if reinstall:
+                pins = reinstall_pins()
+                opti_only = {'dxgi.dll', 'OptiScaler.ini', 'nvapi64.dll', 'fakenvapi.ini', 'dlssg_to_fsr3_amd_is_better.dll'}
+                opti_only.update(name for name in pins if name.lower().startswith(('optiscaler/', 'd3d12_optiscaler/')))
+                for name in sorted(opti_only.intersection(pins)):
+                    target=folder/name
+                    if str(target) in changes or not os.path.lexists(target):
+                        continue
+                    self.runtime().no_symlink_parents(target)
+                    if target.is_symlink() or not target.is_file() or not any(file_matches(target, pin) for pin in pins[name]):
+                        # nvapi64.dll can also be a stock vendor library.
+                        if name == 'nvapi64.dll':
+                            continue
+                        raise RuntimeError('无法确认现有文件归属：'+name)
+                    changes[str(target)]=None
+                compatibility = ('fsrxdec.dll', 'libwim-15.dll')
+                if any(os.path.lexists(folder/name) for name in compatibility):
+                    for name, shipped in self._fsr_compat().items():
+                        target=folder/name
+                        if not os.path.lexists(target):
+                            continue
+                        self.runtime().no_symlink_parents(target)
+                        if target.is_symlink() or not target.is_file() or target.read_bytes() != shipped.read_bytes():
+                            raise RuntimeError('无法确认现有文件归属：'+name)
+                        changes[str(target)]=None
+                originals = {}
+                for name, data in list(changes.items()):
+                    if data is None:
+                        continue  # Retirement targets were verified while constructing the plan.
+                    target=Path(name); relative=target.relative_to(folder).as_posix()
+                    self.runtime().no_symlink_parents(target)
+                    if not os.path.lexists(target):
+                        originals[name]=None
+                        continue
+                    if target.is_symlink() or not target.is_file(): raise RuntimeError('无法确认现有文件归属：'+relative)
+                    if relative not in opti_only and target.read_bytes() == data:
+                        del changes[name]
+                        continue
+                    if relative == 'OptiScaler.ini' or any(file_matches(target, pin) for pin in pins.get(relative, [])):
+                        originals[name] = None if relative in opti_only else target
+                    else:
+                        raise RuntimeError('无法确认现有文件归属：'+relative)
+            baseline_changes = {name: data for name, data in changes.items() if data is not None} if reinstall else changes
+            base=self.opti_baseline(appid,base,baseline_changes,originals)
             for f in base:
                 if f['path'] not in changes:continue
                 if version.startswith('10.') and f['path'] == str(folder/'nvapi64.dll'):
                     f.update(suspended=True, suspended_source=None, v10_excluded=True)
                 elif changes[f['path']] is not None:
                     for key in ('suspended', 'suspended_source', 'v10_excluded'):f.pop(key, None)
-            pending=self.opti_transaction(appid,executable,actual,changes,base,version,r,'install')
+            pending=self.opti_transaction(appid,executable,actual,changes,base,version,r,'reinstall' if reinstall else 'install')
             if fsr:
                 from fsr import descriptor
                 record = self.opti_record(appid)

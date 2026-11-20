@@ -236,6 +236,8 @@ class DescriptorTests(unittest.TestCase):
         source = setup.source_descriptor()
         root = Path(__file__).resolve().parent
         version = json.loads((root / 'package.json').read_text())['version']
+        # Local plugin candidates continue to use the published runtime asset.
+        runtime_release = '0.3.5' if '-dev.' in version else version
         build = json.loads((root / 'runtime-build-sources.json').read_text())
         inventory = json.loads((root / 'docs' / f"RUNTIME-INVENTORY-{build['version']}.json").read_text())
         self.assertEqual(source['version'], build['version'])
@@ -243,7 +245,7 @@ class DescriptorTests(unittest.TestCase):
         self.assertEqual(source['sha256'], inventory['sha256'])
         self.assertTrue(source['published'])
         self.assertEqual(source['url'], 'https://github.com/FlightDan/Opti2XMX/releases/download/'
-                                       f"v{version}/{inventory['filename']}")
+                                       f"v{runtime_release}/{inventory['filename']}")
 
     def test_published_descriptor_rejects_unsigned_remote_metadata_and_mirrors(self):
         source = setup.source_descriptor(); source['published'] = True

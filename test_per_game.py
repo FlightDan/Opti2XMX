@@ -18,6 +18,78 @@ tool = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(tool)
 
 
+class GameIdleTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.proc = self.root / "proc"
+        self.proc.mkdir()
+        self.prefix = self.root / "compatdata" / "pfx"
+        self.prefix.mkdir(parents=True)
+        self.game_exe = "FixtureGameUnique.exe"
+
+        def proc_path(value, *parts):
+            if str(value).startswith("/proc/") or value == "/proc":
+                return self.proc.joinpath(str(value).removeprefix("/proc").lstrip("/"), *parts)
+            return Path(value, *parts)
+
+        patcher = patch.object(tool, "Path", side_effect=proc_path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def add_process(self, argv, **env):
+        proc = self.proc / str(99999 if os.getpid() != 99999 else 99998)
+        proc.mkdir()
+        (proc / "cmdline").write_bytes(b"\0".join(os.fsencode(word) for word in argv) + b"\0")
+        (proc / "environ").write_bytes(b"\0".join(os.fsencode(f"{key}={value}") for key, value in env.items()))
+
+    def test_launch_ignores_steam_shell_with_compatdata(self):
+        self.add_process(
+            ["/usr/bin/sh", "-c", "'/home/deck/opti2xmx/launch.sh' '/steam/Proton 11.0/proton' waitforexitandrun '/games/FixtureGameUnique.exe'"],
+            STEAM_COMPAT_DATA_PATH=self.prefix.parent,
+        )
+        manifest = {"status": "active", "prefix": str(self.prefix), "package": str(self.root),
+                    "game_exe": self.game_exe, "config": str(self.root / "game.conf")}
+        args = argparse.Namespace(state=str(self.root), command=["--", "/usr/bin/true"])
+        with patch.object(tool, "load", return_value=manifest), \
+             patch.object(tool, "modern_layout", return_value=False), \
+             patch.object(tool, "select_driver", return_value=(None, False)), \
+             patch.object(tool, "compiler_check", return_value=(True, "compiler ready")), \
+             patch.object(tool, "driver_check", return_value=(True, "driver ready")), \
+             patch.object(tool.os, "execvpe", side_effect=SystemExit(0)) as exec_game:
+            with self.assertRaises(SystemExit) as outcome:
+                tool.launch(args)
+        self.assertEqual(outcome.exception.code, 0)
+        exec_game.assert_called_once()
+        self.assertIn("XMX toolchain and patched driver usable", (self.root / "launch.log").read_text())
+        with self.assertRaisesRegex(RuntimeError, "Prefix is in use"):
+            tool.game_idle(self.prefix, self.game_exe)
+
+    def test_launch_rejects_proton_with_matching_compatdata(self):
+        self.add_process(["/usr/bin/python3", "/steam/Proton 11.0/proton", "waitforexitandrun"],
+                         STEAM_COMPAT_DATA_PATH=self.prefix.parent)
+        with self.assertRaisesRegex(RuntimeError, "Prefix is in use"):
+            tool.game_idle(self.prefix, self.game_exe, launching=True)
+
+    def test_launch_rejects_explicit_wineprefix_for_other_windows_executable(self):
+        self.add_process(["C:\\windows\\system32\\services.exe"], WINEPREFIX=self.prefix)
+        with self.assertRaisesRegex(RuntimeError, "Prefix is in use"):
+            tool.game_idle(self.prefix, self.game_exe, launching=True)
+
+    def test_launch_rejects_live_game_without_prefix_environment(self):
+        self.add_process([f"C:\\games\\{self.game_exe}"])
+        with self.assertRaisesRegex(RuntimeError, "Game is running"):
+            tool.game_idle(self.prefix, self.game_exe, launching=True)
+
+    def test_active_wrapper_lock_refuses_second_operation(self):
+        with tool.prefix_lock(self.prefix, inherit=True), \
+             self.assertRaisesRegex(RuntimeError, "prefix is in use by another wrapper"):
+            with tool.prefix_lock(self.prefix):
+                self.fail("A second operation acquired the prefix lock")
+
+
+
 class BackupTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

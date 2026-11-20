@@ -41,5 +41,19 @@
       "size_bytes": 25379632,
       "source_archive_sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad"
     }
-  }
+  },
+  "known_runtime_shims": [
+    {
+      "version": "20261005",
+      "runtime_archive_sha256": "aa384e5704286e2d765ed9770e6599ad8e46e2d15821c1f9e51682f3521aa50b",
+      "size_bytes": 1009152,
+      "sha256": "56208ff0ad31b6d91923e5fcbfdbdecf694e90fd24bae0296003defb0e870908"
+    },
+    {
+      "version": "20261119",
+      "runtime_archive_sha256": "209d5355880acddeae9acb9389c1721cf5b8c6d8c34459ed978bd9c2ea1c6f45",
+      "size_bytes": 316416,
+      "sha256": "7a6c9d5e4fc6518021191815243b5a175e823d6dd8f3746e9ada95a668615e8e"
+    }
+  ]
 }

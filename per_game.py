@@ -88,6 +88,10 @@ def windows_prefix_path(prefix, relative):
     return path
 
 
+def prefix_is_initialized(prefix):
+    return windows_prefix_path(prefix, Path("drive_c/windows/system32")).is_dir()
+
+
 def prefix_dll_path(prefix):
     return windows_prefix_path(prefix, DLL_REL)
 
@@ -197,7 +201,7 @@ def prefix_lock(prefix, inherit=False):
         os.close(fd)
 
 
-def game_idle(prefix, game_exe):
+def game_idle(prefix, game_exe, *, launching=False):
     """Refuse live same-user game/prefix processes; no process signalling."""
     ancestors = set()
     pid = os.getpid()
@@ -228,9 +232,14 @@ def game_idle(prefix, game_exe):
                 continue
             wine_prefix = env.get("WINEPREFIX")
             compatdata = env.get("STEAM_COMPAT_DATA_PATH")
-            same = bool(wine_prefix and os.path.realpath(wine_prefix) == str(prefix))
-            same |= bool(compatdata and os.path.realpath(compatdata) == str(prefix.parent))
-            if same:
+            same_wine_prefix = wine_prefix and os.path.realpath(wine_prefix) == str(prefix)
+            same_compatdata = compatdata and os.path.realpath(compatdata) == str(prefix.parent)
+            # Steam sets the compatdata variable on launch shells before Proton starts.
+            # Only an actual Wine/Proton command can occupy it on the launch path.
+            # Check the executable and direct script argument, not a shell command string.
+            if launching and same_compatdata:
+                same_compatdata = any(word.startswith(("wine", "proton")) for word in words[:2])
+            if same_wine_prefix or same_compatdata:
                 raise RuntimeError(f"Prefix is in use (PID {proc.name}); close its Proton processes first")
         except (FileNotFoundError, ProcessLookupError):
             continue
@@ -553,7 +562,7 @@ def install(args):
     config = absolute(args.config) if args.config else state / "game.conf"
     if not args.game_exe or "/" in args.game_exe or "\\" in args.game_exe:
         raise RuntimeError("--game-exe must be the exact executable basename, e.g. Cyberpunk2077.exe")
-    if not windows_prefix_path(prefix, Path("drive_c/windows/system32")).is_dir():
+    if not prefix_is_initialized(prefix):
         raise RuntimeError("Explicit initialized prefix required; launch the game once before installing")
     if exists(state) or not state.parent.is_dir():
         raise RuntimeError("--state must be a new directory with an existing parent; retain old backups")
@@ -713,7 +722,7 @@ def launch(args):
         raise RuntimeError("Launch command is required after --")
     prefix = Path(manifest["prefix"])
     with prefix_lock(prefix, inherit=True):
-        game_idle(prefix, manifest["game_exe"])
+        game_idle(prefix, manifest["game_exe"], launching=True)
         package = Path(manifest["package"])
         modern = use_layer = False
         modern_candidate = manifest.get("modern_runtime", False) or any((package / p).exists() for p in ("lib/active", "layer", "lib/mesa-26.3.1"))
