@@ -72,6 +72,31 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(list(parent.iterdir()) if parent.exists() else [], [])
         self.assertFalse(self.manager.progress.snapshot()['running'])
 
+    def test_modern_release_requires_complete_layout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / 'fixture.tar.gz'
+            archive.write_bytes(self.payload)
+            setup.unpack(archive, root)
+            setup.validate_layout(root, lambda p: (2, 0, 2, 68))
+            with self.assertRaisesRegex(RuntimeError, 'Incomplete modern'):
+                setup.validate_layout(root, lambda p: (2, 0, 2, 68), True)
+            for name in setup.MODERN_REQUIRED:
+                path = root / 'runtime' / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('26.3.1' if name == 'lib/active' else 'fixture')
+            setup.validate_layout(root, lambda p: (2, 0, 2, 68), True)
+            (root / 'runtime/layer/gpu-ids.txt').unlink()
+            with self.assertRaisesRegex(RuntimeError, 'gpu-ids'):
+                setup.validate_layout(root, lambda p: (2, 0, 2, 68), True)
+
+    def test_existing_runtime_offers_explicit_upgrade(self):
+        self.manager.runtime_install()
+        self.assertFalse(self.manager.runtime_status()['update_available'])
+        self.descriptor['sha256'] = 'a' * 64
+        self.assertTrue(self.manager.runtime_status()['ready'])
+        self.assertTrue(self.manager.runtime_status()['update_available'])
+
     def test_missing_runtime_and_unpublished_source_no_write_or_download(self):
         self.descriptor['published'] = False
         with patch('runtime_setup.urllib.request.urlopen', side_effect=AssertionError('Network forbidden')):

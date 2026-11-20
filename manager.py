@@ -19,7 +19,7 @@ import sys
 import uuid
 from opti import OptiMixin
 from download_progress import OperationProgress
-from runtime_setup import RuntimeMixin
+from runtime_setup import RuntimeMixin, modern_layout
 from fsr import FsrMixin
 
 
@@ -164,6 +164,10 @@ class Manager(OptiMixin, RuntimeMixin, FsrMixin):
             sr = self.home / '.local/share/opti2xmx/sdk/libxess.dll'
         ready = all((package / name).is_file() for name in ('igdext64.dll', 'lib/libvulkan_intel.so',
                     'tools/cm-compile.sh', 'tools/cmk_pack.py')) and sr.is_file() and (pe_version(sr) or ()) >= (2, 0, 2, 68)
+        try:
+            modern_layout(package, data.get('version') == '20261119' if config.exists() else False)
+        except (OSError, RuntimeError, UnicodeError):
+            ready = False
         ready = ready and all(any(p.is_file() for p in package.glob(pattern)) for pattern in
                     ('igc/neo/bin/ocloc*', 'igc/igc/local/lib/libigc.so*', 'igc/igc/local/lib/libigdfcl.so*'))
         return package, sr, ready

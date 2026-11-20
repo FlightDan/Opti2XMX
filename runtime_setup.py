@@ -19,13 +19,31 @@ import urllib.parse
 import urllib.request
 import uuid
 
-MAX_ARCHIVE = 200 * 1024 * 1024
+MAX_ARCHIVE = 224 * 1024 * 1024
 MAX_EXPANDED = 1024 * 1024 * 1024
 MAX_MEMBERS = 512
 UNPUBLISHED = '固定版本的 XMX 运行环境尚未发布。发布后请更新插件。'
 REQUIRED = ('runtime/igdext64.dll', 'runtime/lib/libvulkan_intel.so',
             'runtime/tools/cm-compile.sh', 'runtime/tools/cmk_pack.py',
             'sdk/libxess.dll', 'runtime/LICENSE', 'runtime/THIRD_PARTY.md', 'sdk/XeSS-LICENSE.txt')
+
+
+MODERN_REQUIRED = ("lib/active", "lib/mesa-26.3.1/libvulkan_intel.so",
+                   "lib/mesa-stock-26.3.1/libvulkan_intel.so", "lib/mesa-26.1.2/libvulkan_intel.so",
+                   "lib/deps/libSPIRV-Tools.so", "lib/deps/libdisplay-info.so.3",
+                   "layer/libVkLayer_xess_xmx.so", "layer/VkLayer_xess_xmx.json", "layer/gpu-ids.txt")
+
+
+def modern_layout(package, required=False):
+    modern = required or any((package / p).exists() for p in ("lib/active", "layer", "lib/mesa-26.3.1"))
+    if modern:
+        for name in MODERN_REQUIRED:
+            p = package / name
+            if p.is_symlink() or not p.is_file() or not p.stat().st_size:
+                raise RuntimeError("Incomplete modern XMX runtime: " + name)
+        if (package / "lib/active").read_text().strip() != "26.3.1":
+            raise RuntimeError("Unsupported active Mesa version")
+    return modern
 
 
 def download_ssl_context():
@@ -73,7 +91,8 @@ def host_issue():
     return ''
 
 
-def validate_layout(root, pe_version):
+def validate_layout(root, pe_version, modern_required=False):
+    modern_layout(root / "runtime", modern_required)
     for name in REQUIRED:
         path = root / name
         if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
@@ -156,7 +175,14 @@ class RuntimeMixin:
             problem = ''
         except (OSError, ValueError, KeyError, TypeError) as error:
             ready, problem = False, 'Invalid runtime configuration: ' + str(error)
-        return dict(ready=ready, available=descriptor['published'], version=descriptor['version'],
+        update_available = False
+        if ready and descriptor['published']:
+            try:
+                selected = json.loads((self.root / 'runtime.json').read_text())
+                update_available = selected.get('sha256') != descriptor['sha256']
+            except (OSError, ValueError, TypeError):
+                update_available = True
+        return dict(ready=ready, update_available=update_available, available=descriptor['published'], version=descriptor['version'],
                     size_bytes=descriptor['size_bytes'], host_issue=host_issue(),
                     error=problem, availability_message='' if descriptor['published'] else
                     UNPUBLISHED)
@@ -225,12 +251,12 @@ class RuntimeMixin:
             self.progress.update(identity, 'extracting')
             payload.mkdir(mode=0o700)
             unpack(archive, payload)
-            validate_layout(payload, pe_version)
+            validate_layout(payload, pe_version, descriptor["version"] == "20261119")
             self.progress.update(identity, 'installing')
             icd = staging / 'intel_icd.json'
             icd.write_text(json.dumps({'file_format_version': '1.0.0', 'ICD': {
                 'api_version': '1.4.348', 'library_arch': '64',
-                'library_path': str(payload / 'runtime/lib/libvulkan_intel.so')}}))
+                'library_path': str(payload / ('runtime/lib/mesa-26.3.1/libvulkan_intel.so' if descriptor['version'] == '20261119' else 'runtime/lib/libvulkan_intel.so'))}}))
             for check in (lambda: rt.driver_check(payload / 'runtime', icd),
                           lambda: rt.compiler_check(payload / 'runtime')):
                 ok, detail = check()

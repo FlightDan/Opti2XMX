@@ -1,0 +1,352 @@
+{
+  "filename": "opti2xmx-xmx-runtime-20261119.tar.gz",
+  "size_bytes": 213295873,
+  "sha256": "209d5355880acddeae9acb9389c1721cf5b8c6d8c34459ed978bd9c2ea1c6f45",
+  "members": {
+    "runtime/LICENSE": {
+      "size_bytes": 1641,
+      "sha256": "1067db399e1acc9e30a16df71d0a9e4700ffab9c962d9899d2c862887bcb3763",
+      "mode": 420
+    },
+    "runtime/PROVENANCE.json": {
+      "size_bytes": 959,
+      "sha256": "5c665b8eacfc3a6c3a32b9c06892f4b326b11832c0b1592d6790d7cdfc8c7f1e",
+      "mode": 420
+    },
+    "runtime/THIRD_PARTY.md": {
+      "size_bytes": 6189,
+      "sha256": "8a82d02e073c7e6c997d167d87e11b4a038ebd94d01f6ec2c0558a47b069f41f",
+      "mode": 420
+    },
+    "runtime/docs/dev/building.md": {
+      "size_bytes": 35301,
+      "sha256": "30c466ff19658f93f26e35b31a0dafce14bcfda9fde4f1836ac72a3cc87358cc",
+      "mode": 420
+    },
+    "runtime/igc/igc/local/lib/igc2/NOTICES.txt": {
+      "size_bytes": 29813,
+      "sha256": "3c9d5dffed3faf89159e3cc714c5512dee5e9c554faf57a5b00823f4356e2cf9",
+      "mode": 420
+    },
+    "runtime/igc/igc/local/lib/libiga64.so.2": {
+      "size_bytes": 2874360,
+      "sha256": "48a5139400c842462680ed83003bd8c0bb6975c268195b2d24fd9570cfa61f7b",
+      "mode": 420
+    },
+    "runtime/igc/igc/local/lib/libiga64.so.2.10.10+18926": {
+      "size_bytes": 2874360,
+      "sha256": "48a5139400c842462680ed83003bd8c0bb6975c268195b2d24fd9570cfa61f7b",
+      "mode": 420
+    },
+    "runtime/igc/igc/local/lib/libigc.so.2": {
+      "size_bytes": 92598664,
+      "sha256": "e227001747a5b288143b323f7eedde3010c4ce461f6a714a5abdeeff3847f1cb",
+      "mode": 420
+    },
+    "runtime/igc/igc/local/lib/libigc.so.2.10.10+18926": {
+      "size_bytes": 92598664,
+      "sha256": "e227001747a5b288143b323f7eedde3010c4ce461f6a714a5abdeeff3847f1cb",
+      "mode": 420
+    },
+    "runtime/igc/igc/local/lib/libigdfcl.so.2": {
+      "size_bytes": 2067344,
+      "sha256": "9a1ce980892ef1c238ad515846bd8de46b48e6b43223682946b6370a74156818",
+      "mode": 420
+    },
+    "runtime/igc/igc/local/lib/libigdfcl.so.2.10.10+18926": {
+      "size_bytes": 2067344,
+      "sha256": "9a1ce980892ef1c238ad515846bd8de46b48e6b43223682946b6370a74156818",
+      "mode": 420
+    },
+    "runtime/igc/igc/local/lib/libopencl-clang2.so.15": {
+      "size_bytes": 138485536,
+      "sha256": "f5abbfd22c5fc1cd4919e48c5b7eded38e69e0111e71c950653ee37a4db6a029",
+      "mode": 420
+    },
+    "runtime/igc/neo/bin/ocloc-25.18.1": {
+      "size_bytes": 5016,
+      "sha256": "ceb5ac61431c01bf0002c29a4e3ecba7f5f65452f436ea1b5d98de65d824ec09",
+      "mode": 493
+    },
+    "runtime/igc/neo/lib/x86_64-linux-gnu/libocloc.so": {
+      "size_bytes": 2865632,
+      "sha256": "4f7823313710f68b0492493127b57f0d1394b46a1f91b239100b0bb52a26811e",
+      "mode": 420
+    },
+    "runtime/igc/neo/share/doc/intel-ocloc/changelog.Debian.gz": {
+      "size_bytes": 235,
+      "sha256": "cf6b44714ba3d65f860867c08efcb45f69efe8af14ff5429b4c3f21553449ae6",
+      "mode": 420
+    },
+    "runtime/igc/neo/share/doc/intel-ocloc/copyright": {
+      "size_bytes": 5089,
+      "sha256": "8d4b4c883e2e68e2dcf2085a6835867d7d45326e2c7711211e2ef826253f0af6",
+      "mode": 420
+    },
+    "runtime/igdext64.dll": {
+      "size_bytes": 316416,
+      "sha256": "7a6c9d5e4fc6518021191815243b5a175e823d6dd8f3746e9ada95a668615e8e",
+      "mode": 420
+    },
+    "runtime/layer/VkLayer_xess_xmx.json": {
+      "size_bytes": 630,
+      "sha256": "7f25f6dbc66d8d2cbbff789cbf001f5cd6c086d1190c03cfeff212eb54952d14",
+      "mode": 420
+    },
+    "runtime/layer/gpu-ids.txt": {
+      "size_bytes": 1032,
+      "sha256": "0b878c89c0bd05325d18a2edbe80843a3e15f91738235a4f6c37be93a53632c1",
+      "mode": 420
+    },
+    "runtime/layer/libVkLayer_xess_xmx.so": {
+      "size_bytes": 867736,
+      "sha256": "b5af3100742666b36ea61a5fb1e860e7f8cff24dd56925f6c089c0df3a87f1a0",
+      "mode": 420
+    },
+    "runtime/layer/third_party/blake3/LICENSE_A2": {
+      "size_bytes": 11361,
+      "sha256": "00fcc7a934ddbc9ece2a7cc063ac788e284b703b1d705ccbba72d462aa97921e",
+      "mode": 420
+    },
+    "runtime/layer/third_party/blake3/LICENSE_CC0": {
+      "size_bytes": 7048,
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "mode": 420
+    },
+    "runtime/lib/active": {
+      "size_bytes": 7,
+      "sha256": "e35f85db6458a3e4736f050ff42d720b39bbff9debe6b50c11e753b3ac2ecc3d",
+      "mode": 420
+    },
+    "runtime/lib/bundled/LICENSE.SPIRV-Tools": {
+      "size_bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "mode": 420
+    },
+    "runtime/lib/bundled/LICENSE.libdisplay-info": {
+      "size_bytes": 1089,
+      "sha256": "15b396244e58830c5614b9394f4deccfe684970cd507f299383ab57ad339eedd",
+      "mode": 420
+    },
+    "runtime/lib/bundled/SOURCES.txt": {
+      "size_bytes": 253,
+      "sha256": "c8edfa50671f5b94f560e70aaaf7e393762d32db90d06f34806ce69eed2bdb7c",
+      "mode": 420
+    },
+    "runtime/lib/deps/libSPIRV-Tools.so": {
+      "size_bytes": 1793848,
+      "sha256": "682509000299acd8e0fc9ea912eb5165e660522ec31951a2abf9704893252768",
+      "mode": 420
+    },
+    "runtime/lib/deps/libdisplay-info.so.3": {
+      "size_bytes": 239816,
+      "sha256": "1087ce40f8f228d794b377b75fc113deb2099e34fcbbf593fce14ff31a48e228",
+      "mode": 420
+    },
+    "runtime/lib/libvulkan_intel.so": {
+      "size_bytes": 17232,
+      "sha256": "275b5c15d34a79d158ea62635656f84fbcec0a1a9cce1d492da78d0809435cc4",
+      "mode": 420
+    },
+    "runtime/lib/mesa-26.1.2/libvulkan_intel.so": {
+      "size_bytes": 27688584,
+      "sha256": "5d8aec64893b33b38b31313680210742636f059c6efc79acd48c74460e8fc5a0",
+      "mode": 420
+    },
+    "runtime/lib/mesa-26.3.1/libvulkan_intel.so": {
+      "size_bytes": 29921816,
+      "sha256": "2b60f088ac2b3bb1ebd3b99aebee796b5c5e6c777558b1bf29003846e693d678",
+      "mode": 420
+    },
+    "runtime/lib/mesa-stock-26.3.1/libvulkan_intel.so": {
+      "size_bytes": 29797088,
+      "sha256": "82acb2702290ff7f02932009307015e3bffc467e6b656233dc40f21bb5508f78",
+      "mode": 420
+    },
+    "runtime/licenses/IGC-LICENSE.md": {
+      "size_bytes": 237,
+      "sha256": "8b2cd951f44d1fbe6adcf112e1f3a0cc989c89c8889a1c48dea5f7ece10ba9c9",
+      "mode": 420
+    },
+    "runtime/licenses/IGC-NOTICES.txt": {
+      "size_bytes": 29813,
+      "sha256": "3c9d5dffed3faf89159e3cc714c5512dee5e9c554faf57a5b00823f4356e2cf9",
+      "mode": 420
+    },
+    "runtime/licenses/IGC-libclc-LICENSE.txt": {
+      "size_bytes": 3258,
+      "sha256": "7682ee9d13c5b9c44254fd7f929bf9dc535dcd152236054693d16c2f9ff48315",
+      "mode": 420
+    },
+    "runtime/licenses/Mesa-license.rst": {
+      "size_bytes": 1816,
+      "sha256": "0d1a0472ecc81830e75c20d59b0ea02841e3db21255e0ebad97ab682c54d6615",
+      "mode": 420
+    },
+    "runtime/licenses/Mesa-source-copyright-and-SPDX.txt": {
+      "size_bytes": 1402556,
+      "sha256": "84da3968fe194daf4429b38c235e2b6e2095370bcf632bb1c882009529e6c248",
+      "mode": 420
+    },
+    "runtime/licenses/compute-runtime-LICENSE.md": {
+      "size_bytes": 1074,
+      "sha256": "987a002c6c9eb75290d9937735641ef4f4b670591ee79e1ac8edebe16a81872e",
+      "mode": 420
+    },
+    "runtime/licenses/compute-runtime-package-copyright.txt": {
+      "size_bytes": 5089,
+      "sha256": "8d4b4c883e2e68e2dcf2085a6835867d7d45326e2c7711211e2ef826253f0af6",
+      "mode": 420
+    },
+    "runtime/licenses/mesa-26.3.1/docs/license.rst": {
+      "size_bytes": 1816,
+      "sha256": "0d1a0472ecc81830e75c20d59b0ea02841e3db21255e0ebad97ab682c54d6615",
+      "mode": 420
+    },
+    "runtime/licenses/mesa-26.3.1/licenses/Apache-2.0": {
+      "size_bytes": 10045,
+      "sha256": "7e4d3fba250d15e9e0afa380d4b611828fa2560cc8fdebe95bcf2f01a487de12",
+      "mode": 420
+    },
+    "runtime/licenses/mesa-26.3.1/licenses/BSL-1.0": {
+      "size_bytes": 1649,
+      "sha256": "9b9fea7520a816107fcac2598b7c0155222f16bc430e989706b22f4367f1df7d",
+      "mode": 420
+    },
+    "runtime/licenses/mesa-26.3.1/licenses/GPL-1.0-or-later": {
+      "size_bytes": 13047,
+      "sha256": "8ff76f1528e6e4e9400c0f6b1f2d19d4979aaac3bcc44bb707a55389132825c4",
+      "mode": 420
+    },
+    "runtime/licenses/mesa-26.3.1/licenses/GPL-2.0-only": {
+      "size_bytes": 18424,
+      "sha256": "6667ad4063569cd53b13500550d93fcd3dc11bcf82c5514296af013a0b720ba5",
+      "mode": 420
+    },
+    "runtime/licenses/mesa-26.3.1/licenses/MIT": {
+      "size_bytes": 1372,
+      "sha256": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
+      "mode": 420
+    },
+    "runtime/licenses/mesa-26.3.1/licenses/SGI-B-2.0": {
+      "size_bytes": 1822,
+      "sha256": "686bf035a1fd22076416fd3b90370ac67771e884bf57f55693d51f8ce7c710a7",
+      "mode": 420
+    },
+    "runtime/licenses/mesa-26.3.1/licenses/exceptions/Linux-Syscall-Note": {
+      "size_bytes": 1257,
+      "sha256": "9b4084655174654608fd037e9ddb4feeadfada01cd042e9c17b05aa7105b2b9f",
+      "mode": 420
+    },
+    "runtime/licenses/mesa/licenses/Apache-2.0": {
+      "size_bytes": 10045,
+      "sha256": "7e4d3fba250d15e9e0afa380d4b611828fa2560cc8fdebe95bcf2f01a487de12",
+      "mode": 420
+    },
+    "runtime/licenses/mesa/licenses/BSL-1.0": {
+      "size_bytes": 1649,
+      "sha256": "9b9fea7520a816107fcac2598b7c0155222f16bc430e989706b22f4367f1df7d",
+      "mode": 420
+    },
+    "runtime/licenses/mesa/licenses/GPL-1.0-or-later": {
+      "size_bytes": 13047,
+      "sha256": "8ff76f1528e6e4e9400c0f6b1f2d19d4979aaac3bcc44bb707a55389132825c4",
+      "mode": 420
+    },
+    "runtime/licenses/mesa/licenses/GPL-2.0-only": {
+      "size_bytes": 18424,
+      "sha256": "6667ad4063569cd53b13500550d93fcd3dc11bcf82c5514296af013a0b720ba5",
+      "mode": 420
+    },
+    "runtime/licenses/mesa/licenses/MIT": {
+      "size_bytes": 1372,
+      "sha256": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
+      "mode": 420
+    },
+    "runtime/licenses/mesa/licenses/SGI-B-2.0": {
+      "size_bytes": 1822,
+      "sha256": "686bf035a1fd22076416fd3b90370ac67771e884bf57f55693d51f8ce7c710a7",
+      "mode": 420
+    },
+    "runtime/licenses/mesa/licenses/exceptions/Linux-Syscall-Note": {
+      "size_bytes": 1257,
+      "sha256": "9b4084655174654608fd037e9ddb4feeadfada01cd042e9c17b05aa7105b2b9f",
+      "mode": 420
+    },
+    "runtime/patches/0001-anv-cm-kernel-injection.patch": {
+      "size_bytes": 98525,
+      "sha256": "2f56670974b38182daaf2ac8ad6eb3cb2802a899c86980b1ad419693c325dfae",
+      "mode": 420
+    },
+    "runtime/patches/0002-anv-cm-debug-tools.patch": {
+      "size_bytes": 15952,
+      "sha256": "3e70e8d7c90d1262c9e6665201edfd3b0e7f08cc8efca0704deb3ffe1e7e9349",
+      "mode": 420
+    },
+    "runtime/patches/0003-anv-cm-xe2-large-grf.patch": {
+      "size_bytes": 15182,
+      "sha256": "00a0a49f6caef36d4a19aa6fff8615a092ea465121a64caed458bb6003c85637",
+      "mode": 420
+    },
+    "runtime/patches/0005-anv-cm-sampler-descriptor-table.patch": {
+      "size_bytes": 6309,
+      "sha256": "84003ed5a157e000b6e3ea28077d810a7b46a2c372901c5eae0b0eabc0078506",
+      "mode": 420
+    },
+    "runtime/patches/mesa-26.3/0001-anv-cm-kernel-injection.patch": {
+      "size_bytes": 103543,
+      "sha256": "21aab87d8346c2cab0d70183ecf58e50cdc08706c828cf2359cb5a9dd2ae7f2f",
+      "mode": 420
+    },
+    "runtime/patches/mesa-26.3/0002-anv-cm-debug-tools.patch": {
+      "size_bytes": 15952,
+      "sha256": "078fc9e7694f6c8e9b6b6394daed08386738517fefb424c788799d1f34db0e45",
+      "mode": 420
+    },
+    "runtime/patches/mesa-26.3/0003-anv-cm-xe2-large-grf.patch": {
+      "size_bytes": 16416,
+      "sha256": "25d34a4e7395e7ab3b9e3c3cf7bb535422ce38ba3be70bc90bd7d0f7b8542fab",
+      "mode": 420
+    },
+    "runtime/patches/mesa-26.3/0005-anv-cm-sampler-descriptor-table.patch": {
+      "size_bytes": 6308,
+      "sha256": "3f30ea296be548e6c6812e694d48921483bbca34d42f13958eaa0eb2d563e245",
+      "mode": 420
+    },
+    "runtime/patches/mesa-26.3/0006-anv-cmat-vars-before-jay.patch": {
+      "size_bytes": 2120,
+      "sha256": "ed5f4467d3243201bfb9328f427f0c379c683260e7a676a2e5cca21f1548c546",
+      "mode": 420
+    },
+    "runtime/shim/LICENSE.md": {
+      "size_bytes": 1061,
+      "sha256": "3ebe2418eb97fed183ace2b20578ec66da56a826ac4651e6c6ede2070efd946c",
+      "mode": 420
+    },
+    "runtime/shim/dxvk-igdext_third-party-programs.md": {
+      "size_bytes": 1755,
+      "sha256": "8f653b9c8e6363f6e5445c91308c9c0cb4d79402fb4afab6666bfb32aa498da3",
+      "mode": 420
+    },
+    "runtime/tools/cm-compile.sh": {
+      "size_bytes": 5837,
+      "sha256": "856ce312e81ca97002d77eed4ca6c3439f35e17aaee53429772072e21c86029d",
+      "mode": 493
+    },
+    "runtime/tools/cmk_pack.py": {
+      "size_bytes": 6045,
+      "sha256": "d841c18e5b3fcce03349e334ae1bf305407560e3f76a7ead4b81b59bea1e987a",
+      "mode": 420
+    },
+    "sdk/XeSS-LICENSE.txt": {
+      "size_bytes": 4194,
+      "sha256": "784be42c39a4a4d03cf85d88e15e59d75828fca773ce45b8dbfffbd7eaf208df",
+      "mode": 420
+    },
+    "sdk/libxess.dll": {
+      "size_bytes": 77795704,
+      "sha256": "251659dd84a3e84de67c886a4186e01f3eca49b00641906fe38bb6b807e5d5b7",
+      "mode": 420
+    }
+  }
+}

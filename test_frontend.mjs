@@ -238,7 +238,9 @@ assert.equal(button('保存设置'),undefined);assert.equal(button('恢复默认
 assert.equal(toggle().disabled,true);assert.equal(optiToggle().disabled,true);assert.equal(button('安装所选版本').disabled,true);
 assert.equal(button('恢复中断的设置').disabled,false);
 button('恢复中断的设置').onClick();await settle();assert.equal(restoreSettingsCalls,2);
-runtime.ready=true;await reopenUI();
+runtime.ready=true;runtime.update_available=true;await reopenUI();
+assert.ok(button('下载并配置 XMX 运行环境'),'existing runtime offers explicit update');
+runtime.update_available=false;await reopenUI();
 assert.equal(button('XMX 运行环境已就绪'),undefined,'ready state is not a separate button');
 assert.equal(button('收起高级设置').description,'Opti 0.9.4 · XMX 运行环境已就绪');
 runtime.ready=false;

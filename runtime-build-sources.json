@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "version": "20261119",
+  "upstream_release": {
+    "commit": "54b327f442c999e4880c98e7b71209c7dd7856b7",
+    "asset_id": 767967427,
+    "url": "https://github.com/HHHHanasak1/xess-xmx-linux/releases/download/20261119/xess-xmx-linux-20261119.zip",
+    "size_bytes": 25309052,
+    "sha256": "ca8d5af2facf4c702e338b623e342fcb4c90e913483913e358bea13f322669f7"
+  },
+  "compiler_and_sdk_release": {
+    "url": "https://github.com/FlightDan/Opti2XMX/releases/download/v0.2.3/opti2xmx-xmx-runtime-20261005-aa384e5704286e2d.tar.gz",
+    "size_bytes": 195558423,
+    "sha256": "aa384e5704286e2d765ed9770e6599ad8e46e2d15821c1f9e51682f3521aa50b",
+    "igc": "2.10.10+18926",
+    "ocloc": "25.18.33578.6",
+    "xess_sdk": "3.0.2",
+    "xess_sr": "2.0.2.68"
+  },
+  "mesa_source": {
+    "version": "26.3.1",
+    "url": "https://archive.mesa3d.org/mesa-26.3.1.tar.xz",
+    "sha256": "4e4e438eac7b840a9383988cbb7c08dad8041da544b9319fc26d319fa7348961"
+  }
+}

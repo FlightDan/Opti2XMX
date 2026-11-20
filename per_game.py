@@ -15,6 +15,24 @@ import sys
 import tempfile
 
 
+MODERN_REQUIRED = ("lib/active", "lib/mesa-26.3.1/libvulkan_intel.so",
+                   "lib/mesa-stock-26.3.1/libvulkan_intel.so", "lib/mesa-26.1.2/libvulkan_intel.so",
+                   "lib/deps/libSPIRV-Tools.so", "lib/deps/libdisplay-info.so.3",
+                   "layer/libVkLayer_xess_xmx.so", "layer/VkLayer_xess_xmx.json", "layer/gpu-ids.txt")
+
+
+def modern_layout(package, required=False):
+    modern = required or any((package / p).exists() for p in ("lib/active", "layer", "lib/mesa-26.3.1"))
+    if modern:
+        for name in MODERN_REQUIRED:
+            p = package / name
+            if p.is_symlink() or not p.is_file() or not p.stat().st_size:
+                raise RuntimeError("Incomplete modern XMX runtime: " + name)
+        if (package / "lib/active").read_text().strip() != "26.3.1":
+            raise RuntimeError("Unsupported active Mesa version")
+    return modern
+
+
 DLL_REL = Path("drive_c/opti2xmx-driver/igdext64.dll")
 OWNER_REL = Path(".oxp3-xess-owner.json")
 DIAGNOSTICS = ("igdext_kernels", "igdext_dump", "igdext_trace.log", "igdext_xell.log")
@@ -253,9 +271,17 @@ def host_python(env):
 
 def driver_check(package, icd):
     """Resolve dependencies and enumerate a GPU, in child processes only."""
-    lib = package / "lib/libvulkan_intel.so"
     try:
+        modern = modern_layout(package)
+        lib = Path(json.loads(icd.read_text())["ICD"]["library_path"]) if modern else package / "lib/libvulkan_intel.so"
         env = host_environment()
+        if modern:
+            env["LD_LIBRARY_PATH"] = str(package / "lib/deps") + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+            layer = package / "layer/libVkLayer_xess_xmx.so"
+            for item in (lib, layer):
+                result = subprocess.run(["ldd", str(item)], env=env, capture_output=True, text=True, timeout=20)
+                if result.returncode or "not found" in result.stdout + result.stderr:
+                    return False, "Runtime dependency check failed:\n" + result.stdout + result.stderr
         python = host_python(env)
         result = subprocess.run(["ldd", str(lib)], env=env, capture_output=True, text=True, timeout=20)
         report = result.stdout + result.stderr
@@ -266,13 +292,24 @@ def driver_check(package, icd):
             env=env, capture_output=True, text=True, timeout=20)
         if result.returncode:
             return False, "driver load failed:\n" + result.stderr
-        env.update(VK_DRIVER_FILES=str(icd), VK_LOADER_LAYERS_DISABLE="*")
+        env.update(VK_DRIVER_FILES=str(icd))
+        if modern and "mesa-stock-26.3.1" in str(lib):
+            env.pop("VK_LOADER_LAYERS_DISABLE", None)
+            env.pop("XMX_LAYER_DISABLE", None)
+            env.update(VK_ADD_LAYER_PATH=str(package / "layer"), VK_LOADER_LAYERS_ENABLE="VK_LAYER_XESS_xmx",
+                       XMX_LAYER_HELPER=str(package / "tools/cm-compile.sh"), XMX_IGC_DIR=str(package / "igc"))
+        else:
+            env["VK_LOADER_LAYERS_DISABLE"] = "*"
+            if modern:
+                env["XMX_LAYER_DISABLE"] = "1"
         result = subprocess.run(["vulkaninfo", "--summary"], env=env, capture_output=True, text=True, timeout=20)
         report = result.stdout + result.stderr
         if result.returncode or "deviceName" not in report:
             return False, "Vulkan enumeration failed:\n" + report
+        if modern and "mesa-stock-26.3.1" in str(lib) and "VK_LAYER_XESS_xmx" not in report:
+            return False, "XMX Vulkan layer unavailable:\n" + report
         return True, report
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.TimeoutExpired) as error:
         return False, str(error)
 
 
@@ -469,6 +506,47 @@ def restore_locked(state, manifest, reason="restore"):
         raise
 
 
+def fsr_active(manifest):
+    if not manifest.get("fsr_guard_ini"):
+        return False
+    import configparser
+    config = configparser.ConfigParser(interpolation=None, strict=False)
+    if not config.read(manifest["fsr_guard_ini"], encoding="utf-8-sig"):
+        raise RuntimeError('FSR configuration is missing; restore or repair it before launch')
+    return (config.get("Upscalers", "Dx12Upscaler", fallback="").lower() == "ffx"
+            and config.get("FSR", "UpscalerIndex", fallback="") == "9")
+
+
+def layer_gpu(package, drm=Path("/sys/class/drm")):
+    ids = set()
+    for line in (package / "layer/gpu-ids.txt").read_text().splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0] in ("xe2", "xe3"):
+            ids.add(parts[1].lower())
+    found = False
+    for vendor in drm.glob("card*/device/vendor"):
+        try:
+            if vendor.read_text().strip().lower() == "0x8086":
+                found = True
+                if (vendor.parent / "device").read_text().strip().lower() not in ids:
+                    return False
+        except OSError:
+            return False
+    return found
+
+
+def select_driver(package, manifest):
+    if not modern_layout(package):
+        return package / "lib/libvulkan_intel.so", False
+    use_layer = not fsr_active(manifest) and layer_gpu(package)
+    return package / ("lib/mesa-stock-26.3.1/libvulkan_intel.so" if use_layer else "lib/mesa-26.3.1/libvulkan_intel.so"), use_layer
+
+
+def write_icd(path, driver):
+    atomic_text(path, json.dumps({"file_format_version": "1.0.1", "ICD": {
+        "api_version": "1.4.348", "library_arch": "64", "library_path": str(driver)}}) + "\n")
+
+
 def install(args):
     ordinary_user()
     prefix, package, state = map(absolute, (args.prefix, args.package, args.state))
@@ -490,6 +568,7 @@ def install(args):
     no_symlink_parents(prefix / "placeholder")
     no_symlink_parents(state / "placeholder")
     no_symlink_parents(config)
+    modern = modern_layout(package)
     required = ("igdext64.dll", "lib/libvulkan_intel.so", "tools/cm-compile.sh", "tools/cmk_pack.py")
     for name in required:
         if not (package / name).is_file():
@@ -514,7 +593,7 @@ def install(args):
         manifest = dict(schema=1, state=str(state), prefix=str(prefix), package=str(package),
                         config=str(config), game_exe=args.game_exe, status="backed_up",
                         created_dirs=[], files=[], ownership_acquired=False, restore_progress=[],
-                        upstream="20261005 (caller-staged)")
+                        upstream="20261005 (caller-staged)", modern_runtime=modern)
         try:
             # Snapshot every mutable file before the first mutation. A prior .stock is untouched.
             manifest["files"] = [snapshot(state, "igdext64.dll", dll), snapshot(state, "game.conf", config),
@@ -535,8 +614,8 @@ def install(args):
                 Path(directory).mkdir()
             atomic_copy(package / "igdext64.dll", dll)
             icd = state / "intel_icd.json"
-            atomic_text(icd, json.dumps({"file_format_version": "1.0.1", "ICD": {
-                "api_version": "1.4.348", "library_arch": "64", "library_path": str(package / "lib/libvulkan_intel.so")}}) + "\n")
+            driver, _ = select_driver(package, manifest)
+            write_icd(icd, driver)
             drivers = [str(icd)] + [path for path in stock_icds()
                                     if Path(path).name not in ("intel_icd.json", "intel_icd.x86_64.json")]
             env = dict(XMX_CONF=str(config), VK_DRIVER_FILES=":".join(drivers),
@@ -545,8 +624,13 @@ def install(args):
                        XDG_CACHE_HOME=str(state / "cache"), CM_LOG=str(state / "cache/xess-xmx/compile.log"),
                        force_vk_vendor="0")
             (state / "cache/xess-xmx").mkdir()
+            if modern:
+                env.pop("VKD3D_DISABLE_EXTENSIONS")
             text = "# Per-game XMX environment; edit diagnostic switches here while the game is closed.\n"
             text += "".join(f"export {key}={shlex.quote(value)}\n" for key, value in env.items())
+            if modern:
+                text += 'export LD_LIBRARY_PATH=' + shlex.quote(str(package / "lib/deps")) + '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n'
+                text += 'export VKD3D_DISABLE_EXTENSIONS="${VKD3D_DISABLE_EXTENSIONS:+$VKD3D_DISABLE_EXTENSIONS,}VK_EXT_descriptor_buffer,VK_EXT_descriptor_heap,VK_KHR_present_wait2"\n'
             text += dxgi_identity_config()
             text += dll_environment_config(prefix, dll)
             atomic_text(config, text)
@@ -580,6 +664,43 @@ def restore(args):
     print(f"Original DLL/config restored; backup and evidence retained in {state}. Remove this game's launch option.")
 
 
+XMX_LAYER_NAME = "VK_LAYER_XESS_xmx"
+
+
+def disable_xmx_layer(env):
+    for key, separator in (("VK_LOADER_LAYERS_ENABLE", ","), ("VK_INSTANCE_LAYERS", ":")):
+        if key in env:
+            env[key] = separator.join(part for part in env[key].split(separator) if part != XMX_LAYER_NAME)
+    disabled = env.get("VK_LOADER_LAYERS_DISABLE", "").split(",")
+    if XMX_LAYER_NAME not in disabled:
+        disabled.append(XMX_LAYER_NAME)
+    env["VK_LOADER_LAYERS_DISABLE"] = ",".join(part for part in disabled if part)
+    env["XMX_LAYER_DISABLE"] = "1"
+
+
+# Applied after sourcing the user-editable game config, so session and config
+# layer selections cannot reactivate the XMX layer on the patched route.
+DISABLE_XMX_LAYER_SHELL = r'''
+_xmx_filter_layer() {
+    local key="$1" sep="$2" part result=""; local -a parts
+    IFS="$sep" read -r -a parts <<< "${!key-}"
+    for part in "${parts[@]}"; do
+        if [ "$part" != VK_LAYER_XESS_xmx ] && [ -n "$part" ]; then
+            result="${result:+$result$sep}$part"
+        fi
+    done
+    printf -v "$key" '%s' "$result"; export "$key"
+}
+_xmx_filter_layer VK_LOADER_LAYERS_ENABLE ,
+_xmx_filter_layer VK_INSTANCE_LAYERS :
+case ",${VK_LOADER_LAYERS_DISABLE-}," in
+    *,VK_LAYER_XESS_xmx,*) ;;
+    *) VK_LOADER_LAYERS_DISABLE="${VK_LOADER_LAYERS_DISABLE:+$VK_LOADER_LAYERS_DISABLE,}VK_LAYER_XESS_xmx" ;;
+esac
+export VK_LOADER_LAYERS_DISABLE XMX_LAYER_DISABLE=1
+'''
+
+
 def launch(args):
     state = absolute(args.state)
     manifest = load(state)
@@ -594,26 +715,39 @@ def launch(args):
     with prefix_lock(prefix, inherit=True):
         game_idle(prefix, manifest["game_exe"])
         package = Path(manifest["package"])
-        ok, report = compiler_check(package)
-        if ok:
-            usable, driver_report = driver_check(package, state / "intel_icd.json")
-            ok, report = usable, report + "\n" + driver_report
+        modern = use_layer = False
+        modern_candidate = manifest.get("modern_runtime", False) or any((package / p).exists() for p in ("lib/active", "layer", "lib/mesa-26.3.1"))
+        try:
+            modern = modern_layout(package, manifest.get("modern_runtime", False))
+            driver, use_layer = select_driver(package, manifest)
+            if modern:
+                write_icd(state / "intel_icd.json", driver)
+            ok, report = compiler_check(package)
+            if ok:
+                usable, driver_report = driver_check(package, state / "intel_icd.json")
+                ok, report = usable, report + "\n" + driver_report
+        except (OSError, RuntimeError, ValueError) as error:
+            ok, report = False, str(error)
         with (state / "launch.log").open("a") as log:
             log.write(datetime.datetime.now(datetime.timezone.utc).isoformat() + "\n")
             log.write(("XMX toolchain and patched driver usable\n" if ok else "stock driver + generic XeSS fallback\n") + report + "\n")
         if ok:
             # Shell config is intentionally editable by this user. Arguments remain positional.
-            os.execvpe("bash", ["bash", "-c", 'set -e; . "$1"; shift; exec "$@"',
+            route = ''
+            if modern:
+                if use_layer:
+                    route = 'unset VK_LOADER_LAYERS_DISABLE XMX_LAYER_DISABLE; export VK_ADD_LAYER_PATH=' + shlex.quote(str(package / "layer")) + '${VK_ADD_LAYER_PATH:+:$VK_ADD_LAYER_PATH}; export VK_LOADER_LAYERS_ENABLE=VK_LAYER_XESS_xmx; export XMX_LAYER_HELPER=' + shlex.quote(str(package / "tools/cm-compile.sh")) + '; '
+                else:
+                    route = DISABLE_XMX_LAYER_SHELL
+                route += 'if [ "${XESS_ASYNC:-0}" = 1 ] && [ -z "${IGDEXT_XEFG_ASYNC+x}" ]; then export IGDEXT_XEFG_ASYNC=1; fi; '
+            os.execvpe("bash", ["bash", "-c", 'set -e; . "$1"; shift; ' + route + 'exec "$@"',
                                "xess-game", manifest["config"], *command], os.environ.copy())
-        if manifest.get('fsr_guard_ini'):
-            import configparser
-            config = configparser.ConfigParser(interpolation=None, strict=False)
-            config.read(manifest['fsr_guard_ini'], encoding='utf-8-sig')
-            if (config.get('Upscalers', 'Dx12Upscaler', fallback='').lower() == 'ffx'
-                    and config.get('FSR', 'UpscalerIndex', fallback='') == '9'):
-                raise RuntimeError('FSR XMX requires the patched driver and compiler; restore XeSS or repair the XMX runtime before launch. See ' + str(state / 'launch.log'))
+        if fsr_active(manifest):
+            raise RuntimeError('FSR XMX requires the patched driver and compiler; restore XeSS or repair the XMX runtime before launch. See ' + str(state / 'launch.log'))
         print("XMX toolchain/driver unavailable; using stock Vulkan + generic XeSS. See " + str(state / "launch.log"), file=sys.stderr)
         env = os.environ.copy()
+        if modern_candidate:
+            disable_xmx_layer(env)
         drivers = stock_icds()
         if drivers:
             env["VK_DRIVER_FILES"] = ":".join(drivers)

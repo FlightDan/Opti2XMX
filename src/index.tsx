@@ -16,7 +16,7 @@ type Info = Game & { executables: string[]; libraries: { path: string; version: 
   fsr?: GameFsrStatus;
   opti?: { managed: boolean; installed: boolean; incomplete?: boolean; injection_enabled: boolean; version: string; status: string; rollback: boolean; pending?: Pending; settings_rollback?: boolean; settings_recovery?: boolean; settings: Settings } };
 type Registration = { unregister(): void };
-type RuntimeStatus = {ready:boolean;available:boolean;version:string;size_bytes:number;host_issue:string;error:string;availability_message:string};
+type RuntimeStatus = {ready:boolean;update_available?:boolean;available:boolean;version:string;size_bytes:number;host_issue:string;error:string;availability_message:string};
 type Operation = {schema:number;instance_id:string;operation_id:string|null;appid:number|null;kind:string;version:string;phase:string;running:boolean;downloaded_bytes:number;total_bytes:number|null;error:string|null;revision:number};
 // Steam moves dropdown menus out of Quick Access and unmounts Content. Menu
 // callbacks must update the session, not only a component that no longer exists.
@@ -566,7 +566,7 @@ function Content() {
     : reprepareFsrVersion ? t('重新准备 Opti 10 和 FSR 组件，并重置超分与帧生成；之后重新选择 FSR。')
     : t('安装所选版本，保留回退备份；请先退出游戏。');
   const runtimeReady = runtime?.ready ? t('XMX 运行环境已就绪') : '';
-  const runtimeControl = !runtime?.ready && <ButtonItem layout="below" disabled={busy || !runtime || !runtime.available || !!runtime.host_issue}
+  const runtimeControl = (!runtime?.ready || runtime?.update_available) && <ButtonItem layout="below" disabled={busy || !runtime || !runtime.available || !!runtime.host_issue}
       description={runtime
         ? t(runtime.error || runtime.availability_message || runtime.host_issue || '下载后校验并配置到当前用户目录。')
         : t('正在检查 XMX 运行环境…')}

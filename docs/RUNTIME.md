@@ -1,42 +1,64 @@
 # XMX runtime / XMX 运行环境
 
-Opti2XMX 0.2.3 provides an explicit **Download and configure XMX runtime** button. The small plugin ZIP contains no runtime binaries; OptiScaler installation and management work without them. A full XMX runtime is a separate 195,558,423-byte (195.6 MB / 186.5 MiB) download. / 0.2.3 提供独立的“下载并配置 XMX 运行环境”按钮，小体积插件 ZIP 不含运行库；没有这些组件仍能安装和管理 OptiScaler。完整 XMX 组件单独下载，大小 195,558,423 字节（195.6 MB / 186.5 MiB）。
+Opti2XMX 0.3.5 configures an optional per-game runtime built from the upstream
+[xess-xmx-linux 20261119 release](https://github.com/HHHHanasak1/xess-xmx-linux/releases/tag/20261119).
+The separate runtime download is 213,295,873 bytes (203.4 MiB). Downloading and configuring it is an
+explicit action and does not change system Mesa, the Steam session, Proton
+installations, or an already-configured game's launcher.
 
-**Release state:** the bundled `runtime-source.json` pins the verified composite archive SHA-256, size and exact [v0.2.3 release asset](https://github.com/FlightDan/Opti2XMX/releases/download/v0.2.3/opti2xmx-xmx-runtime-20261005-aa384e5704286e2d.tar.gz). The download starts only when requested. Do not substitute an upstream-only archive: this composite contains the patched Mesa ANV, `igdext64.dll`, IGC/ocloc, compiler helpers, SDK `libxess.dll` and their license files. It contains no OptiScaler. / **发布状态：** `runtime-source.json` 固定已核验完整压缩包的 SHA-256、大小和 v0.2.3 的精确附件地址，仅点击按钮后下载。不能替换成上游原始压缩包：完整组件含修改版 Mesa ANV、`igdext64.dll`、IGC/ocloc、编译辅助程序、SDK `libxess.dll` 和许可文件，不含 OptiScaler。
+Opti2XMX 0.3.5 使用上述上游版本组装可选的单游戏运行库。独立运行库为 213,295,873 字节（203.4 MiB）。
+下载和配置由用户主动触发，不修改系统 Mesa、Steam 会话、Proton 安装或已经配置好的游戏启动器。
 
-The button requires x86_64 Linux, an Intel GPU, and host `bash`, `python3`, `ldd`, `vulkaninfo`. It downloads only on click, verifies the pinned size and SHA-256, rejects traversal, symlinks, hardlinks, special files and oversized archives, then validates the driver and compiler on the host. Only after those checks does it atomically update the user's `runtime.json`. Download progress and final errors remain visible; a failed operation can be retried. An unpublished asset is not reported as success. / 按钮需要 x86_64 Linux、Intel GPU 和上述系统命令。仅点击后下载，校验固定大小和 SHA-256，拒绝路径越界、软／硬链接、特殊文件和超限压缩包，然后检查驱动和编译器依赖。所有检查通过才原子更新用户的 `runtime.json`。下载进度与错误持续显示，失败后可重试，不会把尚未发布的资源报告为成功。
+## Install or upgrade / 安装或升级
 
-Downloaded runtimes live under `~/.local/share/opti2xmx/runtimes/<version>-<hash>-<unique>/`, with `runtime/` and `sdk/` subdirectories. Existing runtime directories are retained because per-game launchers may reference them. No system driver is replaced, no root command is run, and no game or OptiScaler files are changed by runtime setup. Existing configuration remains unchanged on download, integrity, extraction or host-validation failures. / 下载的运行环境保存在用户目录的独立版本路径内，已有目录会保留，因为游戏启动器可能仍引用它们。不替换系统驱动，不执行 root 命令，不修改游戏或 OptiScaler 文件。下载、校验、解压或主机检查失败时保留原配置。
+Use **Download and configure XMX runtime** in the plugin. Opti verifies the
+pinned archive from `runtime-source.json`, extracts regular files, checks the
+host driver and compiler, and changes `runtime.json` only after those checks
+pass. Old runtime directories remain available to their recorded launchers. To
+move a previously configured game to the new runtime, exit the game, restore
+its existing XMX setup in the plugin, and enable XMX again.
 
-The 0.2.3 runtime package supplements the validated development archive with upstream copyright/license notices and source/build references. Its driver, DLL, compiler and helper bytes are unchanged. The same release also carries the corresponding xess-xmx-linux and Mesa source archives; the runtime's existing patches describe the ANV changes. / 0.2.3 的运行库包为已验证的开发压缩包补齐上游版权、许可和来源／构建说明，驱动、DLL、编译器及辅助脚本逐字节不变。同一 Release 另附对应的 xess-xmx-linux 与 Mesa 源码包，运行库中已有补丁记录 ANV 修改。
+在插件中选择 **下载并配置 XMX 运行环境**。插件根据内置描述校验附件、提取普通文件并验证主机驱动
+和编译器，通过后才更新 `runtime.json`。已配置的游戏继续使用其启动记录中的旧运行库。要对某个
+旧游戏使用新版本，退出游戏，在插件中恢复该游戏原有 XMX 设置，再重新开启 XMX。
 
-## Release preparation / 发布准备
+The new runtime contains Mesa ANV 26.3.1 in patched and unpatched variants. The
+per-game launcher uses the bundled unpatched driver plus
+`VK_LAYER_XESS_xmx` for Intel PCI IDs listed by the layer. The existing
+FSR 4.1.2 Lite XMX path and other Intel IDs use patched Mesa 26.3.1. Patched Mesa
+26.1.2 is retained in the composite as part of the upstream driver set. Already
+installed 20261005 runtimes and their per-game rollback records remain usable.
 
-The plugin's bundled descriptor is its trust root; it never downloads a replacement descriptor from the network. To enable a future release, publish the reviewed composite raw archive as an immutable asset in `FlightDan/Opti2XMX`, then update `runtime-source.json` in a reviewed plugin build with `published: true`, its exact HTTPS release-asset URL, size and SHA-256. The released asset name is `opti2xmx-xmx-runtime-20261005-aa384e5704286e2d.tar.gz`; SHA-256 is `aa384e5704286e2d765ed9770e6599ad8e46e2d15821c1f9e51682f3521aa50b`. Do not use `latest`, mutable remote metadata, mirror URLs, or the maintenance installer's outer shard as the raw archive. / 插件内置描述是可信来源，不从网络下载替代描述。未来发布经过审核的完整原始压缩包后，在经过审核的插件构建中填写 `published: true`、精确 HTTPS Release 资源地址、大小和 SHA-256。不得使用 `latest`、可变远程元数据、镜像或维护器外层分片代替原始压缩包。
+新版同时包含 Mesa ANV 26.3.1 的原版和补丁版。Vulkan 层名单内的 Intel PCI ID 使用包内原版驱动
+和 `VK_LAYER_XESS_xmx`。已有的 FSR 4.1.2 Lite XMX 路径及其余 Intel ID 使用补丁版 26.3.1。
+复合包另保留上游驱动组中的补丁版 26.1.2。现有 20261005 运行库和单游戏恢复记录仍可使用。
 
-The maintenance distribution may additionally sign its own descriptor/catalog; the standalone plugin relies on its bundled hash pin and does not fetch or trust those external descriptors. Its optional runtime shard wraps the raw archive at `payload/integration/opti2xmx/runtime.tar.gz`. A maintenance plugin-only installation must omit `runtime.json`; the separate runtime component may configure `/opt/oxp3-opti2xmx/20261005/{runtime,sdk}`. A later successful standalone button action replaces the user's pointer with its own validated user-data paths. / 维护发行包可另外签名描述和目录；独立插件依靠内置哈希，不获取或信任外部描述。维护器的运行环境分片在上述位置封装原始压缩包。仅安装插件时应省略 `runtime.json`，独立运行环境组件可配置 `/opt` 路径。以后按钮安装成功会将用户配置指向它验证过的用户目录。
+To try asynchronous presentation on a game's supported XeSS FG path, close
+the game and add `export XESS_ASYNC=1` to its managed `game.conf`, next to
+its per-game `launch.sh`. It is off by default. The standalone plugin does not install upstream's global
+Proton hook, FSR translation, OFLOW, D3D11 bridge, or Vulkan game DLL override.
 
-## Already prepared runtimes / 已准备的运行环境
+如需在支持的 XeSS 帧生成路径上试用异步呈现，请先退出游戏，再在该游戏受管 `launch.sh` 同目录的
+`game.conf` 中加入 `export XESS_ASYNC=1`。默认关闭。独立插件不安装上游全局 Proton hook，也不部署上游的 FSR 转译、
+OFLOW、D3D11 桥接或 Vulkan 游戏 DLL 覆盖。
 
-Default layout / 默认目录：
+## Host requirements / 主机要求
 
-```text
-~/.local/share/opti2xmx/
-  sdk/libxess.dll
-  runtime/
-    igdext64.dll
-    lib/libvulkan_intel.so
-    tools/cm-compile.sh
-    tools/cmk_pack.py
-    igc/neo/bin/ocloc
-    igc/neo/lib/x86_64-linux-gnu/...
-    igc/igc/local/lib/libigc.so...
-    igc/igc/local/lib/libigdfcl.so...
-```
+Use x86_64 Linux or SteamOS, a compatible Intel GPU, and `bash`, `python3`,
+`ldd`, and `vulkaninfo`. The upstream prebuilt ANV drivers require glibc 2.38
+and Wayland client 1.24 or newer. They also require the newer XCB Present and
+DRI3 APIs supplied by SteamOS 3.10. See the
+[upstream driver requirements](https://github.com/HHHHanasak1/xess-xmx-linux/blob/20261119/docs/drivers.md#library-requirements).
+Driver loading and Vulkan enumeration do not establish game performance.
 
-The SR library must report version 2.0.2.68 or later. Compiler helpers and ocloc must be executable. All driver/compiler dependencies must resolve on the target system. / SR 库版本需为 2.0.2.68 或更高；编译辅助脚本和 ocloc 必须可执行，依赖库必须能在目标系统解析。
+需要 x86_64 Linux 或 SteamOS、兼容 Intel GPU 及上述命令。上游预构建 ANV 驱动要求 glibc 2.38
+和 Wayland 客户端 1.24 或更新版本，以及 SteamOS 3.10 提供的新版 XCB Present 与 DRI3 接口。
+驱动加载和 Vulkan 枚举只能核对运行条件。
 
-Alternatively, create `~/.local/share/opti2xmx/runtime.json` with absolute paths owned by your Steam user / 或写入当前 Steam 用户拥有的绝对路径：
+## Prepared and retained runtimes / 预配置与留存运行库
+
+Prepared runtimes point to absolute paths owned by the Steam user. The new
+composite and old archives keep the existing `runtime/` and `sdk/` layout:
 
 ```json
 {
@@ -45,10 +67,26 @@ Alternatively, create `~/.local/share/opti2xmx/runtime.json` with absolute paths
 }
 ```
 
-Replace `YOUR_USER`. Do not run the plugin as root. / 替换 `YOUR_USER`，不要以 root 运行插件。
+Use `~/.local/share/opti2xmx/runtime.json` for explicit paths. The SR library
+must be version 2.0.2.68 or later. The compiler helper and ocloc must be
+executable. Run Decky and the plugin as the ordinary Steam user. Boiler's
+maintenance runtime may use independent retained paths and its own signed
+descriptor. Its outer shard is not the raw standalone download.
 
-The development baseline used [xess-xmx-linux release 20261005](https://github.com/HHHHanasak1/xess-xmx-linux/releases/tag/20261005), IGC 2.10.10, ocloc 25.18.33578.6, and the SR library from [Intel XeSS v3.0.2](https://github.com/intel/xess/tree/v3.0.2). These version references are provenance, not a tested universal installer recipe. Follow upstream build and license instructions; an upstream archive may not contain the complete layout above.
+预配置运行库可在 `~/.local/share/opti2xmx/runtime.json` 填写由 Steam 用户拥有的绝对路径。
+超分库至少为 2.0.2.68，编译辅助脚本和 ocloc 必须可执行。使用普通 Steam 用户运行。
+Boiler 维护发行由自身签名清单管理，独立下载使用原始附件。
 
-开发基线使用上述版本，但这些记录不是通用安装方案。请遵循上游构建及许可说明；上游压缩包不一定包含完整目录。插件会检查驱动加载、Vulkan 枚举和编译器可用性；这些检查不能证明实际游戏已执行 XMX。
+## Release preparation / 发布准备
 
-For compatibility with existing 0.2.1 development installations, the backend also recognizes legacy `~/oxp3-research/xess/` and `~/oxp3-research/xess-sr/` locations. New installations should use the standard paths above. / 为兼容已有开发安装，后端保留旧目录回退；新安装请使用标准目录。
+`runtime-build-sources.json` pins the upstream non-debug ZIP, the original
+public compiler/SDK bundle, and Mesa 26.3.1 source. `build_runtime.py` accepts
+these three archives explicitly and produces the composite and its member
+inventory. It reuses binary bytes from the verified archives and retains
+upstream license notices and patched-driver source references. The compiler is
+IGC 2.10.10 with ocloc 25.18.33578.6. The Intel XeSS SDK remains 3.0.2.
+
+构建工具只接收上述三份明确指定并经校验的公开输入，生成复合包及逐成员清单，保留来源和许可。
+新正式附件通过 `runtime-source.json` 固定版本、大小和 SHA-256。旧的
+[v0.2.3 独立运行库附件](https://github.com/FlightDan/Opti2XMX/releases/tag/v0.2.3)
+继续用于原有部署的恢复与复现。

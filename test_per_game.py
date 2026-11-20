@@ -440,6 +440,133 @@ class BackupTests(unittest.TestCase):
             self.assertNotIn('/decky', env.get('LD_LIBRARY_PATH', ''))
             self.assertNotIn('PYTHONHOME', env); self.assertNotIn('PYTHONPATH', env)
 
+    def test_modern_route_uses_table_and_fsr_always_patched(self):
+        for name in tool.MODERN_REQUIRED:
+            target = self.package / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('26.3.1' if name == 'lib/active' else 'fixture')
+        (self.package / 'layer/gpu-ids.txt').write_text('xe3 0xb080\nxe2 0x6420\n')
+        drm = self.root / 'drm/card0/device'
+        drm.mkdir(parents=True)
+        (drm / 'vendor').write_text('0x8086')
+        (drm / 'device').write_text('0xb080')
+        self.assertTrue(tool.layer_gpu(self.package, self.root / 'drm'))
+        with patch.object(tool, 'layer_gpu', return_value=True):
+            self.assertTrue(tool.select_driver(self.package, {})[1])
+            ini = self.root / 'OptiScaler.ini'
+            ini.write_text('[Upscalers]\nDx12Upscaler=ffx\n[FSR]\nUpscalerIndex=9\n')
+            driver, use_layer = tool.select_driver(self.package, {'fsr_guard_ini': str(ini)})
+            self.assertFalse(use_layer)
+            self.assertIn('mesa-26.3.1', str(driver))
+            ini.unlink()
+            with self.assertRaisesRegex(RuntimeError, 'FSR configuration is missing'):
+                tool.select_driver(self.package, {'fsr_guard_ini': str(ini)})
+        (drm / 'device').write_text('0x1234')
+        self.assertFalse(tool.layer_gpu(self.package, self.root / 'drm'))
+        (self.package / 'layer/gpu-ids.txt').unlink()
+        with self.assertRaisesRegex(RuntimeError, 'Incomplete modern'):
+            tool.select_driver(self.package, {})
+
+    def test_modern_launch_rechecks_fsr_and_maps_native_fg_async(self):
+        for name in tool.MODERN_REQUIRED:
+            target = self.package / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('26.3.1' if name == 'lib/active' else 'fixture')
+        ini = self.root / 'OptiScaler.ini'
+        ini.write_text('[Upscalers]\nDx12Upscaler=xess\n[FSR]\nUpscalerIndex=9\n')
+        with patch.object(tool, 'layer_gpu', return_value=True):
+            self.install()
+            manifest = tool.load(self.state)
+            manifest['fsr_guard_ini'] = str(ini)
+            tool.save(self.state, manifest)
+            calls = []
+            def capture(file, argv, env):
+                calls.append((file, argv, json.loads((self.state / 'intel_icd.json').read_text())))
+                raise SystemExit(0)
+            with patch.object(tool, 'compiler_check', return_value=(True, 'ok')), \
+                 patch.object(tool, 'driver_check', return_value=(True, 'deviceName = Intel')), \
+                 patch.object(tool.os, 'execvpe', side_effect=capture):
+                with self.assertRaises(SystemExit):
+                    tool.launch(argparse.Namespace(state=str(self.state), command=['--', '/bin/true']))
+                ini.write_text('[Upscalers]\nDx12Upscaler=ffx\n[FSR]\nUpscalerIndex=9\n')
+                with self.assertRaises(SystemExit):
+                    tool.launch(argparse.Namespace(state=str(self.state), command=['--', '/bin/true']))
+        self.assertIn('mesa-stock-26.3.1', calls[0][2]['ICD']['library_path'])
+        self.assertIn('VK_LOADER_LAYERS_ENABLE=VK_LAYER_XESS_xmx', calls[0][1][2])
+        self.assertIn('mesa-26.3.1', calls[1][2]['ICD']['library_path'])
+        self.assertNotIn('VK_LOADER_LAYERS_ENABLE=VK_LAYER_XESS_xmx', calls[1][1][2])
+        self.assertIn('XMX_LAYER_DISABLE=1', calls[1][1][2])
+        self.assertIn('unset VK_LOADER_LAYERS_DISABLE XMX_LAYER_DISABLE', calls[0][1][2])
+        self.assertIn('${IGDEXT_XEFG_ASYNC+x}', calls[0][1][2])
+        self.assertIn('IGDEXT_XEFG_ASYNC=1', calls[0][1][2])
+        self.assertIn('"${XESS_ASYNC:-0}" = 1', calls[0][1][2])
+        command = ['bash', '-c', calls[0][1][2], 'xess-game', str(self.state / 'game.conf'), '/usr/bin/env']
+        inherited = os.environ.copy()
+        inherited.update(VK_LOADER_LAYERS_ENABLE='VK_LAYER_other,VK_LAYER_XESS_xmx,VK_LAYER_extra',
+                         VK_INSTANCE_LAYERS='VK_LAYER_XESS_xmx:VK_LAYER_instance',
+                         VK_LOADER_LAYERS_DISABLE='VK_LAYER_disabled', XMX_LAYER_DISABLE='0')
+        patched = ['bash', '-c', calls[1][1][2], 'xess-game', str(self.state / 'game.conf'), '/usr/bin/env']
+        output = subprocess.run(patched, env=inherited, capture_output=True, text=True, check=True).stdout
+        self.assertIn('VK_LOADER_LAYERS_ENABLE=VK_LAYER_other,VK_LAYER_extra\n', output)
+        self.assertIn('VK_INSTANCE_LAYERS=VK_LAYER_instance\n', output)
+        self.assertIn('VK_LOADER_LAYERS_DISABLE=VK_LAYER_disabled,VK_LAYER_XESS_xmx\n', output)
+        self.assertIn('XMX_LAYER_DISABLE=1\n', output)
+        for explicit, expected in ((None, '1'), ('0', '0')):
+            env = os.environ.copy()
+            env['XESS_ASYNC'] = '1'
+            env.pop('IGDEXT_XEFG_ASYNC', None)
+            if explicit is not None:
+                env['IGDEXT_XEFG_ASYNC'] = explicit
+            output = subprocess.run(command, env=env, capture_output=True, text=True, check=True).stdout
+            self.assertIn('IGDEXT_XEFG_ASYNC=' + expected + '\n', output)
+
+    def test_modern_fallback_removes_only_managed_explicit_layer(self):
+        for name in tool.MODERN_REQUIRED:
+            target = self.package / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('26.3.1' if name == 'lib/active' else 'fixture')
+        with patch.object(tool, 'layer_gpu', return_value=True):
+            self.install()
+        captured = {}
+        def capture(file, argv, env):
+            captured.update(env=env)
+            raise SystemExit(0)
+        inherited = {'VK_LOADER_LAYERS_ENABLE': 'VK_LAYER_a,VK_LAYER_XESS_xmx,VK_LAYER_b',
+                     'VK_INSTANCE_LAYERS': 'VK_LAYER_XESS_xmx:VK_LAYER_c',
+                     'VK_LOADER_LAYERS_DISABLE': 'VK_LAYER_d'}
+        with patch.dict(tool.os.environ, inherited), patch.object(tool, 'compiler_check', return_value=(False, 'missing')), \
+             patch.object(tool.os, 'execvpe', side_effect=capture), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                tool.launch(argparse.Namespace(state=str(self.state), command=['--', '/bin/true']))
+        env = captured['env']
+        self.assertEqual(env['VK_LOADER_LAYERS_ENABLE'], 'VK_LAYER_a,VK_LAYER_b')
+        self.assertEqual(env['VK_INSTANCE_LAYERS'], 'VK_LAYER_c')
+        self.assertEqual(env['VK_LOADER_LAYERS_DISABLE'], 'VK_LAYER_d,VK_LAYER_XESS_xmx')
+        self.assertEqual(env['XMX_LAYER_DISABLE'], '1')
+
+    def test_modern_driver_check_requires_enumerated_layer(self):
+        for name in tool.MODERN_REQUIRED:
+            target = self.package / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('26.3.1' if name == 'lib/active' else 'fixture')
+        icd = self.root / 'icd.json'
+        tool.write_icd(icd, self.package / 'lib/mesa-stock-26.3.1/libvulkan_intel.so')
+        seen = []
+        def run(command, **kwargs):
+            seen.append((command, kwargs['env']))
+            return subprocess.CompletedProcess(command, 0, 'deviceName = Intel', '')
+        with patch.object(tool.subprocess, 'run', side_effect=run), patch.object(tool.shutil, 'which', return_value='/usr/bin/python3'):
+            ok, report = tool.driver_check(self.package, icd)
+        self.assertFalse(ok)
+        self.assertIn('layer unavailable', report)
+        vk_env = seen[-1][1]
+        self.assertEqual(vk_env['VK_LOADER_LAYERS_ENABLE'], 'VK_LAYER_XESS_xmx')
+        self.assertNotIn('XMX_LAYER_DISABLE', vk_env)
+        def with_layer(command, **kwargs):
+            return subprocess.CompletedProcess(command, 0, 'deviceName = Intel VK_LAYER_XESS_xmx', '')
+        with patch.object(tool.subprocess, 'run', side_effect=with_layer), patch.object(tool.shutil, 'which', return_value='/usr/bin/python3'):
+            self.assertTrue(tool.driver_check(self.package, icd)[0])
+
     def test_missing_compiler_never_selects_usable_driver_xmx_path(self):
         self.install()
         (self.package / "igc/neo/bin/ocloc").unlink()

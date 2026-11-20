@@ -25,6 +25,14 @@ class DependencySelection(unittest.TestCase):
         sr.parent.mkdir(parents=True, exist_ok=True)
         sr.write_bytes(b'MZ fixture')
 
+    def test_modern_marker_requires_complete_layout(self):
+        package = self.manager.root / 'runtime'
+        sr = self.manager.root / 'sdk/libxess.dll'
+        self.runtime_tree(package, sr)
+        (package / 'lib/active').write_text('26.3.1')
+        with patch('manager.pe_version', return_value=(2, 0, 2, 68)):
+            self.assertFalse(self.manager.dependencies()[2])
+
     def test_development_tree_is_not_an_implicit_dependency(self):
         legacy = self.home / 'oxp3-research/xess/xess-xmx-linux-20261005'
         sr = self.home / 'oxp3-research/xess-sr/payload/libxess.dll'
