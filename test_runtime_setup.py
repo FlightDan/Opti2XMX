@@ -234,10 +234,16 @@ class RuntimeRPC(unittest.IsolatedAsyncioTestCase):
 class DescriptorTests(unittest.TestCase):
     def test_source_is_bundled_pinned_to_release(self):
         source = setup.source_descriptor()
-        self.assertEqual(source['size_bytes'], 195558423)
-        self.assertEqual(source['sha256'], 'aa384e5704286e2d765ed9770e6599ad8e46e2d15821c1f9e51682f3521aa50b')
+        root = Path(__file__).resolve().parent
+        version = json.loads((root / 'package.json').read_text())['version']
+        build = json.loads((root / 'runtime-build-sources.json').read_text())
+        inventory = json.loads((root / 'docs' / f"RUNTIME-INVENTORY-{build['version']}.json").read_text())
+        self.assertEqual(source['version'], build['version'])
+        self.assertEqual(source['size_bytes'], inventory['size_bytes'])
+        self.assertEqual(source['sha256'], inventory['sha256'])
         self.assertTrue(source['published'])
-        self.assertEqual(source['url'], 'https://github.com/FlightDan/Opti2XMX/releases/download/v0.2.3/opti2xmx-xmx-runtime-20261005-' + source['sha256'][:16] + '.tar.gz')
+        self.assertEqual(source['url'], 'https://github.com/FlightDan/Opti2XMX/releases/download/'
+                                       f"v{version}/{inventory['filename']}")
 
     def test_published_descriptor_rejects_unsigned_remote_metadata_and_mirrors(self):
         source = setup.source_descriptor(); source['published'] = True
