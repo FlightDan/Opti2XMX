@@ -235,9 +235,8 @@ class DescriptorTests(unittest.TestCase):
     def test_source_is_bundled_pinned_to_release(self):
         source = setup.source_descriptor()
         root = Path(__file__).resolve().parent
-        version = json.loads((root / 'package.json').read_text())['version']
-        # Local plugin candidates continue to use the published runtime asset.
-        runtime_release = '0.3.5' if '-dev.' in version else version
+        # The runtime asset retains its original immutable release tag.
+        runtime_release = '0.3.5'
         build = json.loads((root / 'runtime-build-sources.json').read_text())
         inventory = json.loads((root / 'docs' / f"RUNTIME-INVENTORY-{build['version']}.json").read_text())
         self.assertEqual(source['version'], build['version'])
